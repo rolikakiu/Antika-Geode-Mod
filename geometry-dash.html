@@ -1,0 +1,2469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geometry Extra</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; font-family: 'Segoe UI', Arial, sans-serif; color: #fff; }
+  body { display: flex; align-items: center; justify-content: center; }
+
+  canvas#game {
+    background: #0a0a12;
+    border-radius: 8px;
+    box-shadow: 0 0 60px rgba(0,0,0,0.6);
+  }
+
+  .overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    z-index: 10;
+    user-select: none;
+    pointer-events: none;
+  }
+  .overlay.active { pointer-events: auto; }
+  .hidden { display: none !important; }
+
+  #menu h1 {
+    font-size: 72px; font-weight: 900;
+    letter-spacing: 6px;
+    background: linear-gradient(90deg, #00e5ff, #ff6ec7, #ffd000);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 40px rgba(0,229,255,0.35);
+  }
+  #menu p.tag { color: #889; font-size: 14px; letter-spacing: 3px; margin-top: -12px; }
+  #menu .btn-row { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+  #levelList { display: flex; flex-direction: column; gap: 8px; }
+
+  .gbtn {
+    width: 260px; padding: 14px;
+    background: rgba(20,20,35,0.9);
+    border: 2px solid #303051;
+    border-radius: 12px;
+    color: #fff; font-size: 18px; font-weight: 700;
+    letter-spacing: 1px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .gbtn:hover { border-color: #00e5ff; background: rgba(0,229,255,0.12); transform: scale(1.03); }
+  .gbtn.small { width: 200px; padding: 10px; font-size: 15px; }
+  .gbtn.blue { border-color: #00e5ff; background: rgba(0,229,255,0.15); }
+  .gbtn.mini { width: auto; padding: 4px 10px; font-size: 12px; font-weight: 600; }
+  .gbtn.mini.danger { border-color: #ff5c5c; color: #ff8d8d; background: rgba(255,92,92,0.08); }
+  .gbtn.mini.danger:hover { border-color: #ff5c5c; background: rgba(255,92,92,0.2); transform: none; }
+
+  .acc-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; width: 100%; padding: 8px 10px; margin: 4px 0;
+    background: rgba(20,20,35,0.7); border: 1px solid #303051; border-radius: 8px;
+  }
+  .acc-row .acc-name { font-size: 14px; font-weight: 700; color: #fff; }
+  .acc-row .acc-role { font-size: 11px; color: #889; }
+  .acc-row .acc-now { font-size: 11px; font-weight: 800; color: #32e06a; letter-spacing: 1px; }
+
+  .profile-form { width: 100%; margin: 10px 0; padding: 10px; background: rgba(20,20,35,0.5); border: 1px solid #303051; border-radius: 8px; }
+  .profile-form b { display: block; font-size: 12px; letter-spacing: 1px; color: #889; margin-bottom: 8px; }
+
+  #winScreen {
+    background: rgba(0,0,0,0.55);
+  }
+  #winScreen h2 { font-size: 56px; font-weight: 900; letter-spacing: 4px; color: #00ffa3; text-shadow: 0 0 30px rgba(0,255,163,0.6); }
+  #winScreen p { color: #ccc; font-size: 15px; }
+
+  #editorToolbar {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px;
+    background: rgba(10,10,20,0.92);
+    border: 1px solid #303051; border-radius: 14px;
+    z-index: 20;
+  }
+  #editorToolbar .hint { color: #888; font-size: 12px; }
+  .toolbtn {
+    width: 44px; height: 44px; border-radius: 10px;
+    border: 2px solid #303051; background: #141424; color: #fff;
+    font-size: 20px; cursor: pointer; transition: all 0.12s;
+  }
+  .toolbtn.active { border-color: #00e5ff; background: rgba(0,229,255,0.18); box-shadow: 0 0 12px rgba(0,229,255,0.4); }
+  .toolbtn:hover { border-color: #00e5ff; }
+  .actbtn {
+    padding: 9px 14px; border-radius: 10px;
+    border: 2px solid #303051; background: #141424; color: #fff;
+    font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.12s;
+  }
+  .actbtn:hover { border-color: #00ffa3; }
+  .actbtn.danger:hover { border-color: #ff4d6d; color: #ff8096; }
+
+  #iconPanel {
+    position: fixed; right: 16px; top: 50%; transform: translateY(-50%);
+    width: 220px; padding: 18px;
+    background: rgba(10,10,20,0.92);
+    border: 1px solid #303051; border-radius: 16px;
+    display: flex; flex-direction: column; gap: 14px; z-index: 20;
+  }
+  #iconPanel h3 { font-size: 15px; letter-spacing: 2px; color: #00e5ff; text-align: center; }
+  #iconPanel .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: #bbb; }
+  #iconPanel input[type=color] { width: 46px; height: 30px; border: none; background: none; cursor: pointer; }
+  #shapeRow { display: flex; gap: 6px; justify-content: center; }
+  #shapeRow .toolbtn { width: 40px; height: 40px; font-size: 16px; }
+
+  #accountBtn { position: fixed; top: 14px; right: 16px; z-index: 30; padding: 8px 14px; font-size: 13px; width: auto; border-radius: 20px; }
+  .panel {
+    width: 320px; background: rgba(14,14,26,0.97);
+    border: 1px solid #303051; border-radius: 16px; padding: 22px;
+    display: flex; flex-direction: column; gap: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .panel h3 { font-size: 17px; letter-spacing: 1px; color: #00e5ff; text-align: center; }
+  .panel input, .panel select {
+    width: 100%; padding: 10px 12px;
+    background: #111122; border: 1px solid #303051; border-radius: 10px;
+    color: #fff; font-size: 14px; font-family: inherit; outline: none;
+  }
+  .panel input:focus, .panel select:focus { border-color: #00e5ff; }
+  .panel .msg { font-size: 12.5px; color: #ff8096; text-align: center; min-height: 16px; }
+  .panel .msg.ok { color: #00ffa3; }
+  .panel .switch { background: none; border: none; color: #889; font-size: 12.5px; cursor: pointer; text-decoration: underline; }
+  .panel .switch:hover { color: #00e5ff; }
+  .badgeRow { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .badge-btn { padding: 7px 10px; border-radius: 8px; border: 2px solid #303051; background: #141424; color: #fff; font-size: 12px; cursor: pointer; transition: all 0.12s; }
+  .badge-btn.active { background: #1a1a33; }
+  .rate-stars { display: flex; gap: 4px; justify-content: center; }
+  .rate-star { font-size: 22px; background: none; border: none; color: #333; cursor: pointer; transition: transform 0.1s, color 0.1s; }
+  .rate-star.lit { color: #ffd000; }
+  .rate-star:hover { transform: scale(1.25); }
+
+  .set-row { display: flex; align-items: center; justify-content: space-between; width: 100%; font-size: 13.5px; color: #ccc; }
+  .set-row input[type=range] { width: 130px; accent-color: #00e5ff; }
+  .set-row input[type=checkbox] { width: 20px; height: 20px; accent-color: #00e5ff; cursor: pointer; }
+  .panel .set-title { color: #00e5ff; font-weight: 800; letter-spacing: 1px; font-size: 13px; text-align: left; }
+
+  #hud {
+    position: fixed; top: 14px; left: 16px;
+    display: flex; flex-direction: column; gap: 4px;
+    color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+    z-index: 5; font-size: 15px; font-weight: 700;
+  }
+  #hud .hint { font-size: 12px; color: #aaa; font-weight: 400; }
+
+  #pause {
+    background: rgba(0,0,0,0.5);
+  }
+  #pause h2 { font-size: 52px; font-weight: 900; letter-spacing: 6px; }
+
+  /* ---- SecretOS ---- */
+  #secos {
+    background: linear-gradient(160deg, #0b0f1f, #181430 55%, #241b45);
+  }
+  #secosDesktop { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  #secosIcons { flex: 1; padding: 22px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; flex-wrap: wrap; align-content: flex-start; }
+  .secos-icon {
+    width: 96px; padding: 12px 6px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 10px; color: #fff; cursor: pointer;
+    font-size: 13px; font-weight: 700; text-align: center;
+  }
+  .secos-icon:hover { background: rgba(50,224,106,0.2); border-color: #32e06a; }
+  #secosTaskbar {
+    height: 46px; background: #0f0f1d; border-top: 1px solid #2a2a44;
+    display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  }
+  #secosStart, #secosClose, .secos-task {
+    padding: 8px 14px; border-radius: 8px;
+    border: 1px solid #3a3a5f; background: #181830; color: #fff;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  #secosStart { border-color: #32e06a; color: #32e06a; background: rgba(50,224,106,0.1); }
+  #secosClose:hover, .secos-task:hover { border-color: #ff6ec7; }
+  #secosTasks { flex: 1; display: flex; gap: 8px; overflow: hidden; }
+  .secos-win {
+    position: fixed; width: 340px; height: 250px; min-width: 260px; min-height: 160px;
+    background: #141428; border: 1px solid #3a3a5f; border-radius: 12px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+    display: flex; flex-direction: column;
+  }
+  .secos-win .titlebar {
+    height: 34px; background: #1c1c36; border-radius: 12px 12px 0 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 10px 0 12px; font-weight: 800; font-size: 13px; color: #32e06a;
+    cursor: move; user-select: none;
+  }
+  .secos-win .x { background: none; border: none; color: #889; font-size: 14px; cursor: pointer; padding: 4px; }
+  .secos-win .x:hover { color: #ff4d6d; }
+  .secos-win .body { flex: 1; padding: 12px; overflow: auto; }
+  .about-line { font-size: 13px; color: #ccc; line-height: 1.7; }
+  .about-line b { color: #32e06a; }
+  #gameArea { position: relative; height: 150px; background: #0d1420; border-radius: 8px; cursor: crosshair; overflow: hidden; }
+  #gameDot { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #32e06a; }
+  #gameHud { display: flex; justify-content: space-between; font-size: 13px; color: #888; margin-bottom: 8px; }
+  #secosStartMenu {
+    position: absolute; left: 12px; bottom: 54px; width: 220px; z-index: 30;
+    background: #15152a; border: 1px solid #3a3a5f; border-radius: 12px;
+    padding: 8px; display: flex; flex-direction: column; gap: 6px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  }
+  #secosStartMenu button {
+    text-align: left; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid transparent; background: rgba(255,255,255,0.05); color: #fff;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  #secosStartMenu button:hover { background: rgba(50,224,106,0.15); border-color: #32e06a; }
+  #secosStartMenu #secosPower { border-color: #ff3b5c; color: #ff5c77; background: rgba(255,59,92,0.08); margin-top: 6px; }
+  #secosStartMenu #secosPower:hover { background: rgba(255,59,92,0.2); }
+  #secBoot, #secPower, #secRecovery { position: absolute; inset: 0; z-index: 40; }
+  #secBoot { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+  #secBootLogo { font-size: 40px; font-weight: 900; color: #32e06a; letter-spacing: 8px; }
+  #secBoot p { color: #5f8a72; font-size: 13px; margin: 0; }
+  #secBootBar { width: 280px; height: 8px; border-radius: 4px; background: #0d1420; overflow: hidden; border: 1px solid #2a3a5a; }
+  #secBootFill { width: 0%; height: 100%; background: #32e06a; }
+  #secPower { background: rgba(0,0,0,0.82); display: flex; align-items: center; justify-content: center; }
+  #secPower .pwCard {
+    background: #15152a; border: 1px solid #3a3a5f; border-radius: 14px;
+    padding: 18px 22px; display: flex; flex-direction: column; gap: 8px; min-width: 240px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.7);
+  }
+  #secPower h3 { margin: 0 0 4px; color: #ff5c77; font-size: 16px; letter-spacing: 4px; }
+  #secPower button, #secRecovery button {
+    padding: 9px 14px; border-radius: 8px; border: 1px solid #3a3a5f;
+    background: rgba(255,255,255,0.05); color: #fff; font-weight: 700; cursor: pointer; font-size: 13px;
+  }
+  #secPower button:hover, #secRecovery button:hover { border-color: #32e06a; }
+  #secPower #pwShutdown, #secRecovery #rcLeave { border-color: #ff3b5c; color: #ff5c77; }
+  #secPower .pwDiv { font-size: 10px; color: #556; letter-spacing: 2px; margin: 8px 0 2px; text-align: center; }
+  #secPower .real { border-color: #ff3b5c; color: #ff5c77; background: rgba(255,59,92,0.08); }
+  #secPower .real:hover { background: rgba(255,59,92,0.22); border-color: #ff5c77; }
+  #secRecovery {
+    background: linear-gradient(160deg, #0d1a33, #1a2f55 55%, #12263f);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  }
+  #secRecovery h2 { color: #7fb4ff; letter-spacing: 4px; margin: 0; }
+  #secRecovery p { color: #a9c9ff; font-size: 13px; margin: 0; max-width: 340px; text-align: center; }
+  @keyframes secBootFillAnim { from { width: 0%; } to { width: 100%; } }
+  #fpToast {
+    position: fixed; top: 96px; left: 50%; transform: translateX(-50%) scale(0.6);
+    z-index: 60; pointer-events: none; text-align: center;
+    font-size: 26px; font-weight: 900; color: #7dffa8;
+    text-shadow: 0 0 14px rgba(125,255,168,0.9), 0 0 30px rgba(0,229,255,0.5);
+    opacity: 0; white-space: nowrap;
+  }
+  #fpToast.show { animation: fpPop 1.2s ease-out forwards; }
+  @keyframes fpPop {
+    0% { opacity: 0; transform: translateX(-50%) scale(0.5); }
+    18% { opacity: 1; transform: translateX(-50%) scale(1.18); }
+    45% { transform: translateX(-50%) scale(1); }
+    80% { opacity: 1; }
+    100% { opacity: 0; transform: translateX(-50%) scale(0.8); }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="960" height="540"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="hudLevel">Level</div>
+  <div class="hint" id="bestText"></div>
+  <div class="hint">Space / Up / W / Click = Jump</div>
+  <div class="hint">R = Restart &nbsp; P = Pause &nbsp; Esc = Menu &nbsp; M = Mute &nbsp; F2 = Mods</div>
+  <div class="hint hidden" id="practiceText">Practice mode: C = checkpoint (max 50) &nbsp; X = remove</div>
+</div>
+
+<div id="menu" class="overlay active">
+  <h1>GEOMETRY EXTRA</h1>
+  <p class="tag">A GEOMETRY DASH STYLE GAME</p>
+  <div class="btn-row">
+    <button class="gbtn blue" id="btnPlay">PLAY</button>
+    <button class="gbtn" id="btnCreate">CREATE</button>
+    <button class="gbtn" id="btnIcons">ICON KIT</button>
+    <button class="gbtn" id="btnSettings">SETTINGS</button>
+    <button class="gbtn" id="btnMods">MODS</button>
+  </div>
+  <div id="levelList" class="hidden"></div>
+</div>
+
+<button class="gbtn small" id="accountBtn">LOGIN</button>
+
+<div id="accountOverlay" class="overlay hidden">
+  <div id="switchPanel" class="panel hidden">
+    <h3>ACCOUNTS</h3>
+    <div class="about-line" id="switchCurrent"></div>
+    <div id="switchList"></div>
+    <button class="gbtn small" style="width:100%" id="btnSwitchAdd">Log In / Add Account</button>
+    <button class="gbtn small" style="width:100%" id="btnSwitchProfile">Profile Settings</button>
+    <button class="switch" id="btnSwitchLogout">Log Out</button>
+    <button class="switch" id="btnSwitchClose">Close</button>
+    <p class="msg" id="switchMsg"></p>
+  </div>
+  <div id="profilePanel" class="panel hidden">
+    <h3>PROFILE SETTINGS</h3>
+    <div class="about-line" id="profileInfo"></div>
+    <div id="profileUsername" class="profile-form">
+      <b>Username</b>
+      <input id="profUser" autocomplete="off">
+      <button class="gbtn small" style="width:100%" id="btnProfUser">Change Username</button>
+    </div>
+    <div id="profileEmail" class="profile-form">
+      <b>Email</b>
+      <input id="profEmail" type="email" autocomplete="off">
+      <div id="profEmailCodeWrap" class="hidden">
+        <input id="profEmailCode" placeholder="Enter 6-digit code" inputmode="numeric" maxlength="6">
+        <button class="gbtn small" style="width:100%" id="btnProfEmailConfirm">Confirm New Email</button>
+      </div>
+      <button class="gbtn small" style="width:100%" id="btnProfEmail">Send Code</button>
+    </div>
+    <div id="profilePassword" class="profile-form">
+      <b>Password</b>
+      <input id="profPassCur" type="password" placeholder="Current password">
+      <input id="profPassNew" type="password" placeholder="New password (min 4)">
+      <button class="gbtn small" style="width:100%" id="btnProfPass">Change Password</button>
+    </div>
+    <button class="switch" id="btnProfBack">Back to accounts</button>
+    <p class="msg" id="profileMsg"></p>
+  </div>
+  <div id="loginPanel" class="panel">
+    <h3>LOGIN</h3>
+    <input id="lgUser" placeholder="Username" autocomplete="off">
+    <input id="lgPass" type="password" placeholder="Password">
+    <button class="gbtn small" style="width:100%" id="btnLoginGo">Log In</button>
+    <button class="switch" id="btnForgotPass">Forgot password?</button>
+    <button class="switch" id="btnForgotUser">Forgot username?</button>
+    <button class="switch" id="btnLoginSwitch">Create an account</button>
+    <button class="switch" id="btnLoginCancel">Cancel</button>
+    <p class="msg" id="loginMsg"></p>
+  </div>
+  <div id="forgotPanel" class="panel hidden">
+    <h3 id="forgotTitle">FORGOT PASSWORD</h3>
+    <div class="badgeRow" id="forgotTabs">
+      <button class="badge-btn active" id="tabForgotPass">Password</button>
+      <button class="badge-btn" id="tabForgotUser">Username</button>
+    </div>
+    <input id="fgEmail" placeholder="Email" autocomplete="off">
+    <div id="fgResetWrap" class="hidden">
+      <input id="fgCode" placeholder="Reset code" inputmode="numeric" maxlength="6">
+      <input id="fgNewPass" type="password" placeholder="New password">
+      <button class="gbtn small" style="width:100%" id="btnFgReset">Set New Password</button>
+    </div>
+    <button class="gbtn small" style="width:100%" id="btnFgGo">Send Reset Code</button>
+    <button class="switch" id="btnFgLogin">Back to login</button>
+    <p class="msg" id="fgMsg"></p>
+  </div>
+  <div id="registerPanel" class="panel hidden">
+    <h3>CREATE ACCOUNT</h3>
+    <input id="rgUser" placeholder="Username" autocomplete="off">
+    <input id="rgEmail" type="email" placeholder="Email" autocomplete="off">
+    <input id="rgPass" type="password" placeholder="Password">
+    <button class="gbtn small" style="width:100%" id="btnRegisterGo">Register</button>
+    <div id="rgVerify" class="hidden">
+      <input id="rgCode" placeholder="Enter 6-digit code" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+      <button class="gbtn small" style="width:100%" id="btnVerifyGo">Verify Account</button>
+      <button class="switch" id="btnResendCode">Resend code</button>
+    </div>
+    <button class="switch" id="btnRegSwitch">I already have an account</button>
+    <button class="switch" id="btnRegCancel">Cancel</button>
+    <p class="msg" id="regMsg"></p>
+  </div>
+</div>
+
+<div id="rateOverlay" class="overlay hidden">
+  <div class="panel">
+    <h3 id="rateTitle">RATE LEVEL</h3>
+    <div class="rate-stars" id="rateStars"></div>
+    <div class="badgeRow" id="rateBadges"></div>
+    <button class="gbtn small" style="width:100%" id="btnRateSave">Rate Level</button>
+    <button class="switch" id="btnRateCancel">Cancel</button>
+    <p class="msg" id="rateMsg"></p>
+  </div>
+</div>
+
+<div id="settingsOverlay" class="overlay hidden">
+  <div class="panel">
+    <h3>SETTINGS</h3>
+    <div class="set-row">Music<input type="checkbox" id="sMusicOn"></div>
+    <div class="set-row">Music Volume<input type="range" id="sMusic" min="0" max="100" value="35"></div>
+    <div class="set-row">SFX Volume<input type="range" id="sSfx" min="0" max="100" value="100"></div>
+    <div class="set-row">Screen Shake<input type="checkbox" id="sShake"></div>
+    <div class="set-row">Particles<input type="checkbox" id="sParticles"></div>
+    <div class="set-row">Auto-Jump (hold)<input type="checkbox" id="sAutoJump"></div>
+    <button class="switch hidden" id="secretBtn" title="???">???</button>
+    <button class="gbtn small" style="width:100%" id="btnReset">Reset All Save Data</button>
+    <button class="switch" id="btnSettingsBack">Back</button>
+    <p class="msg" id="settingsMsg"></p>
+  </div>
+</div>
+
+<div id="fpToast">FRAME PERFECT!</div>
+
+<div id="modOverlay" class="overlay hidden">
+  <div class="panel">
+    <h3 style="color:#ff6ec7">MOD MENU</h3>
+    <div class="set-row">Noclip<input type="checkbox" id="mNoclip"></div>
+    <div class="set-row">Infinite Jumps<input type="checkbox" id="mInfJump"></div>
+    <div class="set-row">Low Gravity<input type="checkbox" id="mGravity"></div>
+    <div class="set-row">Speed<input type="range" id="mSpeed" min="0.5" max="3" step="0.25" value="1"></div>
+    <div class="set-row">Jump Power<input type="range" id="mJump" min="1" max="2" step="0.1" value="1"></div>
+    <div class="set-row">Reverse<input type="checkbox" id="mReverse"></div>
+    <div class="set-row">Skip End<input type="checkbox" id="mSkipEnd"></div>
+    <div class="set-row">Follow Camera<input type="checkbox" id="mFollow"></div>
+    <div class="set-row">Practice Mode<input type="checkbox" id="mPractice"></div>
+    <div class="set-row">Show Hitboxes<input type="checkbox" id="mHitboxes"></div>
+    <button class="gbtn small" style="width:100%" id="btnModsBack">Back</button>
+    <p class="msg" id="modsMsg"></p>
+  </div>
+</div>
+
+<div id="winScreen" class="overlay hidden">
+  <h2>LEVEL COMPLETE!</h2>
+  <p>nice jump. press any key or wait to return</p>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <h2>PAUSED</h2>
+  <p>Press P to resume</p>
+</div>
+
+<div id="secos" class="overlay hidden">
+  <div id="secosDesktop">
+    <div id="secosIcons">
+      <button class="secos-icon" data-app="about">i About</button>
+      <button class="secos-icon" data-app="game"># Game</button>
+    </div>
+    <div id="secosWin"></div>
+    <div id="secosStartMenu" class="hidden">
+      <button data-startapp="about">i About</button>
+      <button data-startapp="game"># Dot Hunt</button>
+      <button id="secosPower">POWER</button>
+    </div>
+    <div id="secBoot" class="hidden">
+      <div id="secBootLogo">SECRETOS</div>
+      <div id="secBootBar"><div id="secBootFill"></div></div>
+      <p>Starting</p>
+    </div>
+    <div id="secPower" class="hidden">
+      <div class="pwCard">
+        <h3>POWER</h3>
+        <button id="pwShutdown">Shut down</button>
+        <button id="pwRestart">Restart</button>
+        <button id="pwRecovery">Boot into Recovery</button>
+        <div class="pwDiv">REAL MACHINE ACTIONS</div>
+        <button id="pwRealRestart" class="real">Real Restart</button>
+        <button id="pwRealShutdown" class="real">Real Shut down</button>
+        <button id="pwRealRecovery" class="real">Real Recovery</button>
+        <button id="pwCancel">Cancel</button>
+      </div>
+    </div>
+    <div id="secRecovery" class="hidden">
+      <h2>SECRETOS RECOVERY</h2>
+      <p id="rcMsg">SecretOS did not start correctly. Choose an option to continue.</p>
+      <button id="rcSafe">Safe boot &mdash; disable all mods</button>
+      <button id="rcReset">Restore defaults</button>
+      <button id="rcLeave">Exit to game</button>
+      <button id="rcBack">Back</button>
+    </div>
+    <div id="secosTaskbar">
+      <button id="secosStart">SECRETOS</button>
+      <div id="secosTasks"></div>
+      <button id="secosClose">Exit to game</button>
+    </div>
+  </div>
+</div>
+
+<div id="editorToolbar" class="hidden">
+  <button class="toolbtn" data-brush="spike" title="Spike">^</button>
+  <button class="toolbtn" data-brush="block" title="Block">#</button>
+  <button class="toolbtn" data-brush="platform" title="Platform">=</button>
+  <button class="toolbtn" data-brush="pad" title="Jump Pad">+</button>
+  <button class="toolbtn" data-brush="finish" title="Finish">F</button>
+  <button class="toolbtn" data-brush="eraser" title="Eraser">X</button>
+  <span class="hint">&nbsp;&lt; &gt; scroll &nbsp; &nbsp; click / drag = place</span>
+  <button class="actbtn" id="btnTest">Test</button>
+  <button class="actbtn" id="btnSave">Save</button>
+  <button class="actbtn" id="btnRate">Rate</button>
+  <button class="actbtn danger" id="btnClear">Clear</button>
+  <button class="actbtn" id="btnBackEditor">Menu</button>
+</div>
+
+<div id="iconPanel" class="hidden">
+  <h3>ICON KIT</h3>
+  <div class="row">Cube color <input type="color" id="cPrimary"></div>
+  <div class="row">Accent color <input type="color" id="cSecondary"></div>
+  <div class="row">Trail color <input type="color" id="cTrail"></div>
+  <div id="shapeRow">
+    <button class="toolbtn shapebtn" data-shape="cube">&#9633;</button>
+    <button class="toolbtn shapebtn" data-shape="ball">&#9679;</button>
+    <button class="toolbtn shapebtn" data-shape="ship">&#9650;</button>
+    <button class="toolbtn shapebtn" data-shape="star">&#10038;</button>
+  </div>
+  <button class="actbtn" id="btnIconsBack">Back</button>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 960, H = 540;
+const CELL = 48;
+const GROUND_Y = 480;
+
+function fitCanvas() {
+  const f = Math.min(window.innerWidth / W, window.innerHeight / H);
+  canvas.style.width = Math.floor(W * f) + 'px';
+  canvas.style.height = Math.floor(H * f) + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+fitCanvas();
+
+/* ---------------- Storage & state ---------------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+let icon = store.get('gd_icon', { p: '#00e5ff', s: '#ffffff', t: '#00fff0', sh: 'cube' });
+let muted = store.get('gd_muted', false);
+let customLevel = store.get('gd_custom', []);
+
+let difficulty = store.get('gd_diff', 'normal');
+const DIFFS = {
+  easy:   { label: 'Easy',   speed: 0.8,  jump: 1.12, color: '#00ffa3' },
+  normal: { label: 'Normal', speed: 1,    jump: 1,    color: '#00e5ff' },
+  hard:   { label: 'Hard',   speed: 1.8,  jump: 0.88, color: '#ff4d6d' }
+};
+
+const BADGES = {
+  '':          { name: 'Unrated',  color: '#888888' },
+  'featured':  { name: 'Featured', color: '#00e5ff' },
+  'epic':      { name: 'Epic',     color: '#c064ff' },
+  'legendary': { name: 'Legendary', color: '#ffb000' },
+  'mythic':    { name: 'Mythic',   color: '#ff4d6d' }
+};
+let session = store.get('gd_session', null);
+if (!store.get('gd_device')) store.set('gd_device', 'dev-' + Math.random().toString(36).slice(2, 12));
+let customRating = store.get('gd_rate', { badge: '', stars: 0 });
+let bests = store.get('gd_bests', {}); // key -> 0..100
+let fpStats = store.get('gd_fp', { count: 0 });
+let settings = store.get('gd_settings', { sfxVol: 1, musicVol: 0.35, musicOn: true, shake: true, particles: true, autoJump: true });
+let mods = store.get('gd_mods', { noclip: false, infJump: false, gravity: 1, speed: 1, jump: 1, reverse: false, skipEnd: false, followCam: false, practice: false, showHitboxes: false });
+let parts = [];
+let shakeT = 0;
+
+function currentProg() {
+  if (!run) return 0;
+  const maxX = Math.max(...run.obj.map(o => o.x * CELL));
+  if (!isFinite(maxX) || maxX <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((run.player.x / maxX) * 100)));
+}
+function updateBestHUD() {
+  const el = document.getElementById('bestText');
+  if (el && run && run.level) el.textContent = 'Best: ' + (bests[run.level.key] || 0) + '%';
+}
+
+function spawnBurst(px, py, n, colors) {
+  if (!settings.particles) return;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 150 + Math.random() * 420;
+    parts.push({
+      x: px, y: py,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 120,
+      g: 1200, life: Math.random() * 0.4, max: 0.8,
+      s: 3 + Math.random() * 5, c: colors[Math.floor(Math.random() * colors.length)]
+    });
+  }
+}
+function updateParts(dt) {
+  for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += p.g * dt; p.life += dt; }
+  parts = parts.filter(p => p.life < p.max);
+}
+function drawParts() {
+  for (const p of parts) {
+    ctx.globalAlpha = Math.max(0, 1 - p.life / p.max);
+    ctx.fillStyle = p.c;
+    ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+const SHAPES = ['cube', 'ball', 'ship', 'star'];
+const SHAPE_CHARS = { cube: '&square;', ball: '&bullet;', ship: '&triangle;', star: '&sext;' };
+
+/* ---------------- Audio ---------------- */
+let actx = null;
+function audio() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (actx && actx.state === 'suspended') { actx.resume(); }
+  if (actx && !musTimer) musicStart(actx);
+  return actx;
+}
+function tone(f0, f1, dur, type, vol) {
+  if (muted) return;
+  const a = audio(); if (!a) return;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type || 'square';
+  o.frequency.setValueAtTime(f0, a.currentTime);
+  o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), a.currentTime + dur);
+  const v = (vol || 0.12) * (settings ? settings.sfxVol : 1);
+  g.gain.setValueAtTime(v, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(); o.stop(a.currentTime + dur);
+}
+const sfx = {
+  jump(){ tone(420, 720, 0.12, 'square', 0.08); },
+  pad(){ tone(300, 1100, 0.22, 'sawtooth', 0.1); },
+  death(){ tone(420, 70, 0.4, 'sawtooth', 0.14); },
+  win(){ [523, 659, 784, 1046].forEach((n, i) => setTimeout(() => tone(n, n, 0.18, 'triangle', 0.12), i * 120)); },
+  click(){ tone(800, 800, 0.05, 'sine', 0.08); }
+};
+
+/* ---------------- Music engine (procedural, no files) ---------------- */
+const BPM = 140;
+const SIX = 60 / BPM / 4;
+let musStep = 0, musNext = 0, musTimer = null;
+
+const LEAD = [
+  440, 0, 523.25, 0, 659.25, 0, 783.99, 0,
+  440, 0, 523.25, 0, 587.33, 0, 659.25, 0,
+  392, 0, 440, 0, 523.25, 0, 587.33, 0,
+  523.25, 0, 587.33, 0, 659.25, 0, 783.99, 0,
+  880, 0, 783.99, 0, 659.25, 0, 587.33, 0,
+  523.25, 0, 659.25, 0, 587.33, 0, 523.25, 0,
+  440, 0, 523.25, 0, 587.33, 0, 659.25, 0,
+  523.25, 0, 440, 0, 392, 0, 329.63, 0
+];
+const BASS = [110, 0, 130.81, 0, 98, 0, 82.41, 0];
+
+function mNote(a, freq, t, dur, type, vol) {
+  if (!a) return;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  const v = vol * (settings.musicVol || 0.35);
+  g.gain.setValueAtTime(v, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+function scheduleStep(a, s, t) {
+  if (!a) return;
+  const m = s % 16;
+// kick (four on the floor)
+  if (m === 0 || m === 4 || m === 8 || m === 12) {
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.11);
+    const v = 0.5 * (settings.musicVol || 0.35);
+    g.gain.setValueAtTime(v, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    o.connect(g); g.connect(a.destination);
+    o.start(t); o.stop(t + 0.14);
+  }
+  // clap / snare on 2 and 4
+  if (m === 4 || m === 12) mNote(a, 180, t, 0.09, 'triangle', 0.16);
+  // open hat on off-beats
+  if (s % 2 === 1) mNote(a, 6800, t, 0.035, 'triangle', 0.05);
+  // bass
+  const bf = BASS[s % 8];
+  if (bf) mNote(a, bf, t, (s % 8 === 0 ? 0.24 : 0.15), 'sawtooth', 0.28);
+  // lead melody with echo
+  const lf = LEAD[s % 64];
+  if (lf) {
+    mNote(a, lf, t, 0.2, 'square', 0.09);
+    mNote(a, lf, t + SIX * 2, 0.13, 'square', 0.035);
+  }
+}
+
+function musicStart(a) {
+  if (!a || musTimer) return;
+  if (!settings.musicOn || muted || settings.musicVol <= 0) return;
+  musNext = a.currentTime + 0.08;
+  musStep = 0;
+  musTimer = setInterval(() => {
+    while (musNext < a.currentTime + 0.18) {
+      if (!muted && settings.musicOn && settings.musicVol > 0) scheduleStep(a, musStep, musNext);
+      musNext += SIX;
+      musStep = (musStep + 1) % 512;
+    }
+  }, 40);
+}
+
+function musicSync() {
+  if (muted || !settings.musicOn || settings.musicVol <= 0) {
+    if (musTimer) { clearInterval(musTimer); musTimer = null; }
+    return;
+  }
+  const a = audio(); if (!a) return;
+  if (!musTimer) musicStart(a);
+}
+
+/* ---------------- Built-in levels ---------------- */
+function o(x, y, t) { return { x, y, t }; }
+
+const LEVELS = [
+  { name: 'Stereo Rush', speed: 280, objects: [
+    o(8, 0, 'spike'),
+    o(14, 0, 'spike'),
+    o(18, 0, 'spike'), o(19, 0, 'spike'),
+    o(23, 0, 'block'),
+    o(27, 0, 'pad'),
+    o(31, 1, 'platform'), o(36, 1, 'platform'),
+    o(31, 0, 'spike'), o(33, 0, 'spike'), o(35, 0, 'spike'), o(37, 0, 'spike'),
+    o(41, 0, 'finish')
+  ]},
+  { name: 'Back on Track', speed: 330, objects: [
+    o(7, 0, 'spike'), o(9, 0, 'spike'),
+    o(12, 0, 'block'), o(13, 0, 'block'), o(12, 1, 'spike'),
+    o(17, 0, 'spike'), o(18, 0, 'spike'), o(19, 0, 'spike'),
+    o(23, 1, 'platform'), o(24, 1, 'platform'), o(27, 1, 'platform'),
+    o(23, 0, 'spike'), o(25, 0, 'spike'), o(26, 0, 'spike'),
+    o(31, 0, 'pad'),
+    o(36, 0, 'spike'), o(38, 0, 'spike'),
+    o(40, 0, 'finish')
+  ]},
+  { name: 'Insane Run', speed: 380, objects: [
+    o(5, 0, 'spike'), o(6, 0, 'spike'),
+    o(10, 0, 'block'), o(10, 1, 'block'), o(10, 2, 'block'),
+    o(12, 0, 'spike'), o(12, 1, 'spike'),
+    o(16, 1, 'platform'), o(17, 1, 'platform'), o(19, 1, 'platform'),
+    o(16, 0, 'spike'), o(18, 0, 'spike'), o(20, 0, 'spike'),
+    o(24, 0, 'pad'),
+    o(28, 1, 'platform'), o(29, 1, 'platform'),
+    o(28, 0, 'spike'), o(30, 0, 'spike'), o(32, 0, 'spike'),
+    o(34, 0, 'finish')
+  ]}
+];
+
+const BRUSHES = ['spike', 'block', 'platform', 'pad', 'finish', 'eraser'];
+
+/* ---------------- Geometry helpers ---------------- */
+function rowY(g) { return GROUND_Y - CELL - g * CELL; }
+function objRect(obj) {
+  const x = obj.x * CELL, y = rowY(obj.y);
+  switch (obj.t) {
+    case 'block': return [x, y, CELL, CELL];
+    // Match the red lethal core shown on the spike sprite.
+    case 'spike': return [x + 18, y + 12, 12, 22];
+    case 'platform': return [x, y, CELL, 16];
+    case 'pad': return [x + 4, y + 16, CELL - 8, CELL - 16];
+    case 'finish': return [x + 10, -1000, CELL - 20, GROUND_Y + 1000];
+    default: return [x, y, CELL, CELL];
+  }
+}
+function aabb(a, b) {
+  return a[0] < b[0] + b[2] && a[0] + a[2] > b[0] &&
+         a[1] < b[1] + b[3] && a[1] + a[3] > b[1];
+}
+
+/* ---------------- Player / run state ---------------- */
+let run = null;
+let runState = 'idle'; // idle | dying | won
+let deathTimer = 0;
+let winTimer = 0;
+let paused = false;
+
+function startRun(level, diff) {
+  const d = diff || DIFFS.normal;
+  const player = { x: CELL * 1.5, y: GROUND_Y - CELL, vy: 0, rot: 0, grounded: true, airTime: 0 };
+  run = { level, player, camX: 0, trail: [], padCd: 0, obj: level.objects, diff: d, jv: JUMP_V * d.jump, fpMap: new Map() };
+  runState = 'playing';
+  deathTimer = 0; winTimer = 0; paused = false;
+}
+
+/* ---------------- Input ---------------- */
+const keys = {};
+let jumpPressed = false;
+let jumpHeld = false;
+let mouse = { x: 0, y: 0, down: false };
+
+function pressJump() {
+  jumpPressed = true;
+  jumpHeld = true;
+  if (!paused && runState === 'playing' && run && (run.player.grounded || mods.infJump)) {
+    run.player.vy = -((run.jv || JUMP_V) * mods.jump);
+    run.player.grounded = false;
+    sfx.jump();
+  }
+  audio();
+}
+function releaseJump() { jumpHeld = false; }
+
+window.addEventListener('keydown', (e) => {
+  keys[e.key] = true;
+  if (e.key === ' ' || e.key.toLowerCase() === 'w' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!e.repeat) pressJump();
+  }
+  if (e.key.toLowerCase() === 'm') { muted = !muted; store.set('gd_muted', muted); musicSync(); }
+  if (e.key === 'F2') toggleModMenu();
+
+  if (screen === 'play') {
+    if (e.key.toLowerCase() === 'r') { sfx.click(); if (!mods.practice) startRun(run.level, run.diff); else flashToast('Press Esc to exit practice'); }
+    if (e.key.toLowerCase() === 'c') placeCheckpoint();
+    if (e.key.toLowerCase() === 'x') clearCheckpoint();
+    if (e.key.toLowerCase() === 'p') {
+      paused = !paused;
+      document.getElementById('pause').classList.toggle('hidden', !paused);
+      if (paused) document.getElementById('pause').classList.add('active');
+      else document.getElementById('pause').classList.remove('active');
+    }
+    if (e.key === 'Escape') {
+      const mo = document.getElementById('modOverlay');
+      if (!mo.classList.contains('hidden')) closeModMenu();
+      else { hud(false); closeWin(); toMenu(); }
+    }
+  }
+  if (screen === 'menu' && e.key === 'Escape') closeLevelList();
+  if (screen === 'editor') {
+    if (e.key.toLowerCase() === 'r') setBrush('eraser');
+    if (e.key.toLowerCase() === '`' || e.key.toLowerCase() === 'h') toggleHelp();
+  }
+});
+window.addEventListener('keyup', (e) => {
+  keys[e.key] = false;
+  if (e.key === ' ' || e.key.toLowerCase() === 'w' || e.key === 'ArrowUp') releaseJump();
+});
+
+canvas.addEventListener('pointerdown', (e) => {
+  audio();
+  const pt = canvasPoint(e);
+  mouse.x = pt.x; mouse.y = pt.y; mouse.down = true;
+  if (screen === 'play' && !paused && runState === 'playing') { pressJump(); }
+  if (screen === 'editor') { editorPlace(); }
+  canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+});
+window.addEventListener('pointerup', (e) => { mouse.down = false; releaseJump(); });
+window.addEventListener('pointermove', (e) => {
+  const pt = canvasPoint(e);
+  mouse.x = pt.x; mouse.y = pt.y;
+});
+canvas.addEventListener('wheel', (e) => {
+  if (screen === 'editor') {
+    e.preventDefault();
+    editorCam -= Math.sign(e.deltaY) * CELL;
+  }
+}, { passive: false });
+
+function canvasPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+}
+
+/* ---------------- Screens & menu ---------------- */
+let screen = 'menu';
+
+function hud(on) { document.getElementById('hud').classList.toggle('hidden', !on); }
+function toMenu() {
+  screen = 'menu';
+  run = null; runState = 'idle';
+  hud(false);
+  openMenu();
+  closeWin();
+  document.getElementById('pause').classList.add('hidden');
+}
+function openMenu() {
+  document.getElementById('menu').classList.remove('hidden');
+  document.getElementById('menu').classList.add('active');
+}
+function closeMenu() {
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('menu').classList.remove('active');
+}
+function closeWin() {
+  document.getElementById('winScreen').classList.add('hidden');
+  document.getElementById('winScreen').classList.remove('active');
+}
+
+/* Level select */
+function buildLevelList() {
+  const list = document.getElementById('levelList');
+  list.innerHTML = '';
+
+  const diffRow = document.createElement('div');
+  diffRow.style.cssText = 'display:flex;gap:8px;justify-content:center;align-items:center;';
+  const diffLabel = document.createElement('span');
+  diffLabel.style.cssText = 'color:#889;font-size:13px;letter-spacing:1px;';
+  diffLabel.textContent = 'LEVEL select — difficulty:';
+  diffRow.appendChild(diffLabel);
+  Object.keys(DIFFS).forEach((k) => {
+    const b = document.createElement('button');
+    b.className = 'gbtn small';
+    b.dataset.diff = k;
+    b.style.width = '92px';
+    b.style.padding = '8px 0';
+    b.style.fontSize = '14px';
+    const active = difficulty === k;
+    b.textContent = DIFFS[k].label;
+    if (active) {
+      b.style.borderColor = DIFFS[k].color;
+      b.style.color = DIFFS[k].color;
+      b.style.background = 'rgba(' + parseInt(DIFFS[k].color.slice(1, 3), 16) + ',' +
+        parseInt(DIFFS[k].color.slice(3, 5), 16) + ',' + parseInt(DIFFS[k].color.slice(5, 7), 16) + ',0.15)';
+    }
+    b.onclick = () => {
+      difficulty = k;
+      store.set('gd_diff', k);
+      sfx.click();
+      buildLevelList();
+    };
+    diffRow.appendChild(b);
+  });
+  const sep = document.createElement('div');
+  sep.style.cssText = 'height:2px;background:#303051;border-radius:2px;margin:2px 0;';
+  list.appendChild(diffRow);
+  list.appendChild(sep);
+
+  LEVELS.forEach((lv, i) => {
+    const b = document.createElement('button');
+    b.className = 'gbtn small';
+    b.textContent = 'Level ' + (i + 1) + ' — ' + lv.name;
+    b.onclick = () => { sfx.click(); closeLevelList(); lv.key = 'l' + (i + 1); startLevel(lv); };
+    list.appendChild(b);
+  });
+  const bc = document.createElement('button');
+  bc.className = 'gbtn small blue';
+  const rateBadge = BADGES[customRating.badge || ''];
+  const starsTxt = customRating.stars ? ' \u2605' + customRating.stars : '';
+  bc.textContent = 'My Custom Level';
+  if (rateBadge && customRating.badge) {
+    const sp = document.createElement('span');
+    sp.style.cssText = 'margin-left:8px;font-size:12px;color:' + rateBadge.color + ';';
+    sp.textContent = '[' + rateBadge.name + ']' + starsTxt;
+    bc.appendChild(sp);
+  }
+  bc.onclick = () => {
+    sfx.click(); closeLevelList();
+    const lv = { name: 'My Level', speed: 320, objects: customLevel, key: 'custom' };
+    startLevel(lv);
+  };
+  list.appendChild(bc);
+}
+function closeLevelList() { document.getElementById('levelList').classList.add('hidden'); }
+function startLevel(lv) {
+  if (!lv.key) lv.key = 'custom';
+  closeMenu();
+  hud(true);
+  screen = 'play';
+  const dl = DIFFS[difficulty].label;
+  document.getElementById('hudLevel').textContent = lv.name + ' — ' + dl + (lv.speed >= 380 ? ' &#9889;' : '');
+  startRun(lv, DIFFS[difficulty]);
+  updateBestHUD();
+  updatePracticeHint();
+}
+document.getElementById('btnPlay').onclick = () => {
+  sfx.click();
+  const list = document.getElementById('levelList');
+  const show = list.classList.contains('hidden');
+  buildLevelList();
+  list.classList.toggle('hidden', !show);
+};
+document.getElementById('btnCreate').onclick = () => {
+  sfx.click(); closeMenu(); screen = 'editor';
+  editorInit();
+};
+document.getElementById('btnIcons').onclick = () => {
+  sfx.click(); closeMenu(); screen = 'icons';
+  iconPanelRefresh();
+  document.getElementById('iconPanel').classList.remove('hidden');
+};
+
+/* ---------------- Icon kit ---------------- */
+document.getElementById('cPrimary').oninput = (e) => { icon.p = e.target.value; saveIcon(); };
+document.getElementById('cSecondary').oninput = (e) => { icon.s = e.target.value; saveIcon(); };
+document.getElementById('cTrail').oninput = (e) => { icon.t = e.target.value; saveIcon(); };
+document.querySelectorAll('.shapebtn').forEach(b => {
+  b.onclick = () => { icon.sh = b.dataset.shape; sfx.click(); iconPanelRefresh(); saveIcon(); };
+});
+document.getElementById('btnIconsBack').onclick = () => {
+  sfx.click();
+  document.getElementById('iconPanel').classList.add('hidden');
+  toMenu();
+};
+function saveIcon() {
+  store.set('gd_icon', icon);
+  document.getElementById('cPrimary').value = icon.p;
+  document.getElementById('cSecondary').value = icon.s;
+  document.getElementById('cTrail').value = icon.t;
+}
+function iconPanelRefresh() {
+  saveIcon();
+  document.querySelectorAll('.shapebtn').forEach(b => {
+    b.classList.toggle('active', icon.sh === b.dataset.shape);
+  });
+}
+
+/* ---------------- Accounts & Rating ---------------- */
+const API_URL = (location.protocol === 'file:')
+  ? 'http://localhost:3000'
+  : '';
+
+async function api(path, method, body, token) {
+  const opts = { method: method || 'GET', headers: { 'X-Device-ID': store.get('gd_device', 'none') } };
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  try {
+    const res = await fetch(API_URL + path, opts);
+    let data = null;
+    try { data = await res.json(); } catch (e) {}
+    return { ok: res.ok, status: res.status, data: data || {} };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: 'Cannot reach server' } };
+  }
+}
+
+function setSession(s) {
+  session = s;
+  store.set('gd_session', s);
+  updateAccountBtn();
+  if (s && s.name) renderSwitchList();
+  if (s && s.token) syncAccounts();
+}
+
+function accountList() { return store.get('gd_accounts', []); }
+function saveAccounts(list) { store.set('gd_accounts', list); }
+
+async function syncAccounts() {
+  if (!session || !session.token) return;
+  const r = await api('/api/accounts', 'POST', { token: session.token }, session.token);
+  if (r.ok) { saveAccounts(r.data.accounts); renderSwitchList(); }
+}
+async function refreshAccounts() {
+  const r = await api('/api/accounts', 'GET');
+  if (r.ok) { saveAccounts(r.data.accounts); renderSwitchList(); }
+}
+async function refreshSession() {
+  if (!session || !session.token) return;
+  const r = await api('/api/me', 'GET', null, session.token);
+  if (r.ok && r.data.user && r.data.user.name) {
+    setSession({ name: r.data.user.name, role: r.data.user.role, token: session.token });
+  } else {
+    session = null; store.set('gd_session', null);
+    updateAccountBtn(); renderSwitchList();
+  }
+}
+function openAccountOverlay() {
+  document.getElementById('accountOverlay').classList.remove('hidden');
+  document.getElementById('accountOverlay').classList.add('active');
+  const sw = document.getElementById('switchPanel');
+  const lg = document.getElementById('loginPanel');
+  const rg = document.getElementById('registerPanel');
+  const fg = document.getElementById('forgotPanel');
+  const pf = document.getElementById('profilePanel');
+  [lg, rg, fg, pf].forEach(p => p.classList.add('hidden'));
+  sw.classList.remove('hidden');
+  sw.classList.add('active');
+  document.getElementById('switchMsg').textContent = '';
+  renderSwitchList();
+}
+async function logout() {
+  if (session && session.token) api('/api/logout', 'POST', null, session.token);
+  session = null; store.set('gd_session', null);
+  updateAccountBtn(); renderSwitchList();
+  flashToast('Logged out');
+}
+function renderSwitchList() {
+  const cur = document.getElementById('switchCurrent');
+  if (cur) cur.innerHTML = session
+    ? 'Logged in as: <b>' + session.name + ' (' + session.role + ')</b>'
+    : 'Not logged in';
+  const listEl = document.getElementById('switchList');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  const list = accountList();
+  if (!list.length) { listEl.innerHTML = '<p class="msg" style="padding:6px 0">No saved accounts yet.</p>'; return; }
+  const active = session ? session.name : null;
+  list.forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'acc-row';
+    const isActive = active === a.name;
+    row.innerHTML =
+      '<span class="acc-name">' + (isActive ? '&#9679; ' : '&#9675; ') + a.name +
+      ' <span class="acc-role">(' + a.role + ')</span></span>' +
+      (isActive ? '<span class="acc-now">NOW</span>' :
+        '<button class="gbtn mini" data-act="switch" data-name="' + a.name + '">Switch</button>') +
+      '<button class="gbtn mini danger" data-act="remove" data-name="' + a.name + '">Remove</button>';
+    listEl.appendChild(row);
+  });
+}
+document.getElementById('switchList').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const name = btn.dataset.name;
+  sfx.click();
+  if (btn.dataset.act === 'switch') switchTo(name);
+  else if (btn.dataset.act === 'remove') removeAccount(name);
+});
+document.getElementById('btnSwitchAdd').onclick = () => {
+  sfx.click();
+  document.getElementById('switchPanel').classList.add('hidden');
+  document.getElementById('loginPanel').classList.remove('hidden');
+  document.getElementById('loginMsg').textContent = '';
+};
+document.getElementById('btnSwitchLogout').onclick = () => { sfx.click(); logout(); };
+document.getElementById('btnSwitchClose').onclick = () => { sfx.click(); closeAcc(); };
+
+function showAccountPanel(panelId) {
+  document.querySelectorAll('#accountOverlay .panel').forEach(p => p.classList.add('hidden'));
+  const el = document.getElementById(panelId);
+  el.classList.remove('hidden');
+  el.classList.add('active');
+}
+function openProfilePanel() {
+  sfx.click();
+  if (!session || !session.token) { flashToast('Log in first'); return; }
+  showAccountPanel('profilePanel');
+  document.getElementById('profileMsg').textContent = '';
+  document.getElementById('profEmailCodeWrap').classList.add('hidden');
+  loadProfile();
+}
+async function loadProfile() {
+  const info = document.getElementById('profileInfo');
+  const r = await api('/api/profile', 'GET', null, session.token);
+  if (!r.ok) { info.innerHTML = '<span style="color:#ff8096">Failed to load profile.</span>'; return; }
+  const p = r.data.profile;
+  const d = new Date(p.createdAt);
+  info.innerHTML = 'User: <b>' + p.username + ' (' + p.role + ')</b><br>Email: <b>' + p.email + '</b>' +
+    (p.verified ? '' : ' <span style="color:#ffc24b">(unverified)</span>') +
+    '<br>Member since: <b>' + d.toLocaleDateString() + '</b>';
+  document.getElementById('profUser').value = p.username;
+  document.getElementById('profEmail').value = p.email;
+}
+document.getElementById('btnSwitchProfile').onclick = () => { openProfilePanel(); };
+document.getElementById('btnProfBack').onclick = () => { sfx.click(); showAccountPanel('switchPanel'); renderSwitchList(); };
+
+document.getElementById('btnProfUser').onclick = async () => {
+  const msg = document.getElementById('profileMsg');
+  const name = document.getElementById('profUser').value.trim();
+  if (!name) { msg.textContent = 'Enter a username'; return; }
+  const r = await api('/api/profile/username', 'POST', { username: name }, session.token);
+  if (!r.ok) { msg.className = 'msg'; msg.textContent = (r.data && r.data.error) || 'Failed'; return; }
+  const p = r.data.profile;
+  setSession({ name: p.username, role: p.role, token: session.token });
+  msg.className = 'msg ok'; msg.textContent = 'Username changed to ' + p.username;
+  loadProfile(); refreshAccounts();
+};
+let pendingEmail = false;
+document.getElementById('btnProfEmail').onclick = async () => {
+  const msg = document.getElementById('profileMsg');
+  const email = document.getElementById('profEmail').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.textContent = 'Enter a valid email'; return; }
+  const r = await api('/api/profile/email', 'POST', { email: email }, session.token);
+  if (!r.ok) { msg.className = 'msg'; msg.textContent = (r.data && r.data.error) || 'Failed'; return; }
+  pendingEmail = true;
+  document.getElementById('profEmailCodeWrap').classList.remove('hidden');
+  msg.className = 'msg ok';
+  msg.textContent = r.data.dev ? 'Dev mode: code is in the server console' : 'Code sent to ' + email;
+  document.getElementById('profEmailCode').focus();
+};
+document.getElementById('btnProfEmailConfirm').onclick = async () => {
+  const msg = document.getElementById('profileMsg');
+  if (!pendingEmail) { msg.textContent = 'Send a code first'; return; }
+  const code = document.getElementById('profEmailCode').value.trim();
+  const r = await api('/api/profile/email/confirm', 'POST', { code: code }, session.token);
+  if (!r.ok) { msg.className = 'msg'; msg.textContent = (r.data && r.data.error) || 'Failed'; return; }
+  pendingEmail = false;
+  document.getElementById('profEmailCodeWrap').classList.add('hidden');
+  document.getElementById('profEmailCode').value = '';
+  msg.className = 'msg ok'; msg.textContent = 'Email updated';
+  loadProfile();
+};
+document.getElementById('btnProfPass').onclick = async () => {
+  const msg = document.getElementById('profileMsg');
+  const cur = document.getElementById('profPassCur').value;
+  const next = document.getElementById('profPassNew').value;
+  if (!cur || !next) { msg.textContent = 'Fill both password fields'; return; }
+  const r = await api('/api/profile/password', 'POST', { currentPassword: cur, newPassword: next }, session.token);
+  if (!r.ok) { msg.className = 'msg'; msg.textContent = (r.data && r.data.error) || 'Failed'; return; }
+  document.getElementById('profPassCur').value = '';
+  document.getElementById('profPassNew').value = '';
+  msg.className = 'msg ok'; msg.textContent = 'Password changed';
+};
+
+async function switchTo(name) {
+  const acc = accountList().find(a => a.name === name);
+  if (!acc) { flashToast('Account not found'); return; }
+  const r = await api('/api/me', 'GET', null, acc.token);
+  if (r.ok) {
+    setSession({ name: r.data.user.name, role: r.data.user.role, token: acc.token });
+    flashToast('Switched to ' + r.data.user.name);
+    document.getElementById('switchMsg').textContent = '';
+  } else {
+    if (acc.id != null) await api('/api/accounts/' + acc.id, 'DELETE', null, undefined);
+    saveAccounts(accountList().filter(a => a.name !== name));
+    renderSwitchList();
+    document.getElementById('switchMsg').textContent = name + "'s session expired — removed.";
+  }
+}
+async function removeAccount(name) {
+  const acc = accountList().find(a => a.name === name);
+  if (!acc) return;
+  if (acc.id != null) await api('/api/accounts/' + acc.id, 'DELETE', null, undefined);
+  saveAccounts(accountList().filter(a => a.name !== name));
+  renderSwitchList();
+  if (session && session.name === name) { session = null; store.set('gd_session', null); updateAccountBtn(); }
+}
+
+function updateAccountBtn() {
+  const btn = document.getElementById('accountBtn');
+  if (session) {
+    const roleEmoji = session.role === 'admin' ? '&#9733;' : session.role === 'mod' ? '&#9830;' : '&#8226;';
+    btn.innerHTML = roleEmoji + ' ' + session.name + ' <span style="font-size:11px;color:#889">(' + session.role + ')</span>';
+    btn.style.borderColor = session.role === 'admin' ? '#ffd000' : session.role === 'mod' ? '#c064ff' : '#00e5ff';
+    btn.onclick = () => { sfx.click(); openAccountOverlay(); };
+    btn.title = 'Switch account';
+  } else {
+    btn.innerHTML = 'LOGIN';
+    btn.style.borderColor = '#303051';
+    btn.onclick = () => { sfx.click(); openAccountOverlay(); };
+    btn.title = 'Log in / switch account';
+  }
+}
+updateAccountBtn();
+refreshAccounts();
+refreshSession();
+
+function closeAcc() { document.getElementById('accountOverlay').classList.add('hidden'); document.getElementById('accountOverlay').classList.remove('active'); }
+
+document.getElementById('btnLoginCancel').onclick = () => { sfx.click(); closeAcc(); };
+document.getElementById('btnRegCancel').onclick = () => { sfx.click(); closeAcc(); };
+document.getElementById('btnLoginSwitch').onclick = () => { sfx.click(); document.getElementById('loginPanel').classList.add('hidden'); document.getElementById('registerPanel').classList.remove('hidden'); resetRegForm(); };
+document.getElementById('btnRegSwitch').onclick = () => { sfx.click(); document.getElementById('registerPanel').classList.add('hidden'); document.getElementById('loginPanel').classList.remove('hidden'); document.getElementById('loginMsg').textContent = ''; };
+
+let pendingReg = null;
+function resetRegForm() {
+  pendingReg = null;
+  document.getElementById('rgVerify').classList.add('hidden');
+  document.getElementById('regMsg').className = 'msg';
+  document.getElementById('regMsg').textContent = '';
+}
+
+/* ---- Forgot password / username ---- */
+let forgotMode = 'pass';
+function openForgot(mode) {
+  forgotMode = mode;
+  document.getElementById('loginPanel').classList.add('hidden');
+  document.getElementById('registerPanel').classList.add('hidden');
+  document.getElementById('forgotPanel').classList.remove('hidden');
+  document.getElementById('fgResetWrap').classList.add('hidden');
+  document.getElementById('fgCode').value = '';
+  document.getElementById('fgNewPass').value = '';
+  document.getElementById('fgMsg').className = 'msg';
+  document.getElementById('fgMsg').textContent = '';
+  document.getElementById('forgotTitle').textContent = mode === 'user' ? 'FORGOT USERNAME' : 'FORGOT PASSWORD';
+  document.getElementById('btnFgGo').textContent = mode === 'user' ? 'Send Username' : 'Send Reset Code';
+  document.getElementById('tabForgotPass').classList.toggle('active', mode === 'pass');
+  document.getElementById('tabForgotUser').classList.toggle('active', mode === 'user');
+}
+document.getElementById('btnForgotPass').onclick = () => { sfx.click(); openForgot('pass'); };
+document.getElementById('btnForgotUser').onclick = () => { sfx.click(); openForgot('user'); };
+document.getElementById('tabForgotPass').onclick = () => { sfx.click(); openForgot('pass'); };
+document.getElementById('tabForgotUser').onclick = () => { sfx.click(); openForgot('user'); };
+document.getElementById('btnFgLogin').onclick = () => { sfx.click(); document.getElementById('forgotPanel').classList.add('hidden'); document.getElementById('loginPanel').classList.remove('hidden'); document.getElementById('loginMsg').textContent = ''; };
+
+document.getElementById('btnFgGo').onclick = async () => {
+  const em = document.getElementById('fgEmail').value.trim();
+  const msg = document.getElementById('fgMsg');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { msg.textContent = 'Enter a valid email'; return; }
+  const path = forgotMode === 'user' ? '/api/forgot-username' : '/api/forgot-password';
+  const r = await api(path, 'POST', { email: em });
+  if (!r.ok) { msg.textContent = (r.data && r.data.error) || 'Request failed'; return; }
+  if (forgotMode === 'user') {
+    msg.className = 'msg ok';
+    msg.textContent = 'If that email has an account, the username was sent to it.';
+    if (r.data.dev) setTimeout(() => { msg.className = 'msg'; msg.textContent = 'Dev mode: username printed in the server console.'; }, 1500);
+  } else {
+    document.getElementById('fgResetWrap').classList.remove('hidden');
+    msg.className = 'msg ok';
+    msg.textContent = 'Reset code sent to ' + em;
+    if (r.data.dev) setTimeout(() => { msg.className = 'msg'; msg.textContent = 'Dev mode: code printed in the server console. Enter it below.'; }, 1500);
+  }
+};
+
+document.getElementById('btnFgReset').onclick = async () => {
+  const em = document.getElementById('fgEmail').value.trim();
+  const code = document.getElementById('fgCode').value.trim();
+  const np = document.getElementById('fgNewPass').value;
+  const msg = document.getElementById('fgMsg');
+  if (!em || !code || !np) { msg.textContent = 'Enter email, code and new password'; return; }
+  if (np.length < 4) { msg.textContent = 'Password too short'; return; }
+  const r = await api('/api/reset-password', 'POST', { email: em, code: code, newPassword: np });
+  if (!r.ok) { msg.textContent = (r.data && r.data.error) || 'Reset failed'; return; }
+  msg.className = 'msg ok'; msg.textContent = 'Password updated — you can log in now.';
+  setTimeout(() => { document.getElementById('btnFgLogin').click(); }, 1200);
+};
+
+document.getElementById('btnLoginGo').onclick = async () => {
+  const u = document.getElementById('lgUser').value.trim();
+  const p = document.getElementById('lgPass').value;
+  const msg = document.getElementById('loginMsg');
+  if (!u || !p) { msg.textContent = 'Enter username and password'; return; }
+  const r = await api('/api/login', 'POST', { username: u, password: p });
+  if (!r.ok) { msg.textContent = (r.data && r.data.error) || 'Login failed'; return; }
+  setSession({ name: r.data.user.name, role: r.data.user.role, token: r.data.token });
+  sfx.click();
+  msg.className = 'msg ok'; msg.textContent = 'Logged in!';
+  setTimeout(() => { openAccountOverlay(); }, 450);
+};
+
+document.getElementById('btnRegisterGo').onclick = async () => {
+  const u = document.getElementById('rgUser').value.trim();
+  const e = document.getElementById('rgEmail').value.trim();
+  const p = document.getElementById('rgPass').value;
+  const msg = document.getElementById('regMsg');
+  if (!u || !e || !p) { msg.textContent = 'Enter username, email and password'; return; }
+  if (u.length < 2 || u.length > 16) { msg.textContent = 'Username 2–16 chars'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { msg.textContent = 'Enter a valid email'; return; }
+  const r = await api('/api/register', 'POST', { username: u, email: e, password: p });
+  if (!r.ok) { msg.textContent = (r.data && r.data.error) || 'Register failed'; return; }
+  pendingReg = { name: u, email: e };
+  document.getElementById('rgVerify').classList.remove('hidden');
+  msg.className = 'msg ok';
+  msg.textContent = 'Verification code sent to ' + e;
+  if (r.data.dev) {
+    setTimeout(() => {
+      document.getElementById('regMsg').className = 'msg';
+      document.getElementById('regMsg').textContent = 'Dev mode: code is in the server console';
+    }, 1500);
+  }
+  document.getElementById('rgCode').focus();
+};
+
+async function verifyWith(code) {
+  if (!pendingReg) return;
+  const msg = document.getElementById('regMsg');
+  const r = await api('/api/verify', 'POST', { username: pendingReg.name, code: code });
+  if (!r.ok) { msg.textContent = (r.data && r.data.error) || 'Verify failed'; return; }
+  setSession({ name: r.data.user.name, role: r.data.user.role, token: r.data.token });
+  sfx.click();
+  msg.className = 'msg ok'; msg.textContent = 'Account verified — logged in!';
+  setTimeout(() => { openAccountOverlay(); }, 600);
+}
+
+document.getElementById('btnVerifyGo').onclick = () => { verifyWith(document.getElementById('rgCode').value.trim()); };
+document.getElementById('rgCode').onkeydown = (e) => { if (e.key === 'Enter') verifyWith(document.getElementById('rgCode').value.trim()); };
+
+document.getElementById('btnResendCode').onclick = async () => {
+  if (!pendingReg) return;
+  const msg = document.getElementById('regMsg');
+  const r = await api('/api/resend', 'POST', { username: pendingReg.name });
+  if (!r.ok) { msg.textContent = (r.data && r.data.error) || 'Resend failed'; return; }
+  msg.className = 'msg';
+  msg.textContent = r.data.dev ? 'Code resent — see server console' : 'New code sent';
+};
+
+/* ---- Rate panel ---- */
+let rateBadgeState = customRating.badge || '';
+let rateStarsState = customRating.stars || 0;
+
+function buildRateStars() {
+  const wrap = document.getElementById('rateStars');
+  wrap.innerHTML = '';
+  for (let i = 1; i <= 10; i++) {
+    const b = document.createElement('button');
+    b.className = 'rate-star' + (i <= rateStarsState ? ' lit' : '');
+    b.textContent = '\u2605';
+    b.onclick = () => { sfx.click(); rateStarsState = i; buildRateStars(); };
+    wrap.appendChild(b);
+  }
+}
+function buildRateBadges() {
+  const wrap = document.getElementById('rateBadges');
+  wrap.innerHTML = '';
+  Object.keys(BADGES).forEach(k => {
+    if (k === '') return;
+    const b = document.createElement('button');
+    b.className = 'badge-btn' + (rateBadgeState === k ? ' active' : '');
+    b.textContent = BADGES[k].name;
+    b.style.color = BADGES[k].color;
+    if (rateBadgeState === k) { b.style.borderColor = BADGES[k].color; b.style.background = 'rgba(255,255,255,0.05)'; }
+    b.onclick = () => { sfx.click(); rateBadgeState = rateBadgeState === k ? '' : k; buildRateBadges(); };
+    wrap.appendChild(b);
+  });
+}
+
+function openRatePanel() {
+  if (!session) { flashToast('You must be logged in to rate'); return; }
+  if (session.role !== 'mod' && session.role !== 'admin') { flashToast('Only moderators can rate'); return; }
+  rateBadgeState = customRating.badge || '';
+  rateStarsState = customRating.stars || 0;
+  document.getElementById('rateTitle').textContent = 'RATE — My Level';
+  document.getElementById('rateMsg').textContent = '';
+  buildRateStars(); buildRateBadges();
+  document.getElementById('rateOverlay').classList.remove('hidden');
+  document.getElementById('rateOverlay').classList.add('active');
+}
+function closeRatePanel() { document.getElementById('rateOverlay').classList.add('hidden'); document.getElementById('rateOverlay').classList.remove('active'); }
+
+document.getElementById('btnRateCancel').onclick = () => { sfx.click(); closeRatePanel(); };
+document.getElementById('btnRateSave').onclick = () => {
+  customRating = { badge: rateBadgeState, stars: rateStarsState };
+  store.set('gd_rate', customRating);
+  sfx.click();
+  document.getElementById('rateMsg').className = 'msg ok';
+  document.getElementById('rateMsg').textContent = 'Rated ' + (BADGES[rateBadgeState]?.name || 'Unrated') + (rateStarsState ? ' \u2605' + rateStarsState : '');
+  setTimeout(closeRatePanel, 600);
+};
+
+/* ---- Settings panel ---- */
+document.getElementById('btnSettings').onclick = () => {
+  sfx.click(); closeMenu();
+  screen = 'settings';
+  document.getElementById('sMusicOn').checked = settings.musicOn;
+  document.getElementById('sMusic').value = Math.round(settings.musicVol * 100);
+  document.getElementById('sSfx').value = Math.round(settings.sfxVol * 100);
+  document.getElementById('sShake').checked = settings.shake;
+  document.getElementById('sParticles').checked = settings.particles;
+  document.getElementById('sAutoJump').checked = settings.autoJump;
+  document.getElementById('settingsMsg').textContent = '';
+  const secretBtn = document.getElementById('secretBtn');
+  if (Math.random() < 0.25) {
+    secretBtn.classList.remove('hidden');
+    secretBtn.style.opacity = '1';
+  } else {
+    secretBtn.classList.add('hidden');
+  }
+  document.getElementById('settingsOverlay').classList.remove('hidden');
+  document.getElementById('settingsOverlay').classList.add('active');
+};
+function saveSettings() {
+  settings = {
+    musicOn: document.getElementById('sMusicOn').checked,
+    musicVol: parseInt(document.getElementById('sMusic').value, 10) / 100,
+    sfxVol: parseInt(document.getElementById('sSfx').value, 10) / 100,
+    shake: document.getElementById('sShake').checked,
+    particles: document.getElementById('sParticles').checked,
+    autoJump: document.getElementById('sAutoJump').checked
+  };
+  store.set('gd_settings', settings);
+}
+document.getElementById('sMusic').oninput = () => { saveSettings(); musicSync(); };
+document.getElementById('sMusicOn').onchange = () => { saveSettings(); sfx.click(); musicSync(); };
+document.getElementById('sSfx').oninput = saveSettings;
+document.getElementById('sShake').onchange = () => { saveSettings(); sfx.click(); };
+document.getElementById('sParticles').onchange = () => { saveSettings(); sfx.click(); };
+document.getElementById('sAutoJump').onchange = () => { saveSettings(); sfx.click(); };
+document.getElementById('btnSettingsBack').onclick = () => {
+  sfx.click();
+  document.getElementById('settingsOverlay').classList.add('hidden');
+  document.getElementById('settingsOverlay').classList.remove('active');
+  toMenu();
+};
+let resetArmed = false;
+document.getElementById('btnReset').onclick = () => {
+  if (!resetArmed) {
+    resetArmed = true;
+    document.getElementById('settingsMsg').className = 'msg';
+    document.getElementById('settingsMsg').textContent = 'Click again to wipe ALL save data';
+    setTimeout(() => { resetArmed = false; document.getElementById('settingsMsg').textContent = ''; }, 3000);
+    return;
+  }
+  Object.keys(localStorage).filter(k => k.startsWith('gd_')).forEach(k => localStorage.removeItem(k));
+  location.reload();
+};
+
+/* ---- Mod menu ---- */
+function openModMenu() {
+  const mo = document.getElementById('modOverlay');
+  mo.classList.remove('hidden'); mo.classList.add('active');
+  document.getElementById('mNoclip').checked = mods.noclip;
+  document.getElementById('mInfJump').checked = mods.infJump;
+  document.getElementById('mGravity').checked = mods.gravity < 1;
+  document.getElementById('mSpeed').value = mods.speed;
+  document.getElementById('mJump').value = mods.jump;
+  document.getElementById('mReverse').checked = mods.reverse;
+  document.getElementById('mSkipEnd').checked = mods.skipEnd;
+  document.getElementById('mFollow').checked = mods.followCam;
+  document.getElementById('mPractice').checked = mods.practice;
+  document.getElementById('mHitboxes').checked = !!mods.showHitboxes;
+}
+function closeModMenu() {
+  const mo = document.getElementById('modOverlay');
+  mo.classList.add('hidden'); mo.classList.remove('active');
+}
+function toggleModMenu() {
+  const mo = document.getElementById('modOverlay');
+  if (mo.classList.contains('hidden')) openModMenu(); else closeModMenu();
+}
+function saveMods() { store.set('gd_mods', mods); }
+function updatePracticeHint() {
+  const el = document.getElementById('practiceText');
+  if (el) el.classList.toggle('hidden', !mods.practice);
+}
+
+document.getElementById('mNoclip').onchange = (e) => { mods.noclip = e.target.checked; saveMods(); sfx.click(); };
+document.getElementById('mInfJump').onchange = (e) => { mods.infJump = e.target.checked; saveMods(); sfx.click(); };
+document.getElementById('mGravity').onchange = (e) => { mods.gravity = e.target.checked ? 0.45 : 1; saveMods(); sfx.click(); };
+document.getElementById('mSpeed').oninput = (e) => { mods.speed = parseFloat(e.target.value); saveMods(); };
+document.getElementById('mJump').oninput = (e) => { mods.jump = parseFloat(e.target.value); saveMods(); };
+document.getElementById('mReverse').onchange = (e) => { mods.reverse = e.target.checked; saveMods(); sfx.click(); };
+document.getElementById('mSkipEnd').onchange = (e) => { mods.skipEnd = e.target.checked; saveMods(); sfx.click(); };
+document.getElementById('mFollow').onchange = (e) => { mods.followCam = e.target.checked; saveMods(); sfx.click(); };
+document.getElementById('mPractice').onchange = (e) => { mods.practice = e.target.checked; saveMods(); updatePracticeHint(); sfx.click(); if (mods.practice) flashToast('Practice mode ON — press C to place checkpoints'); };
+document.getElementById('mHitboxes').onchange = (e) => { mods.showHitboxes = e.target.checked; saveMods(); sfx.click(); };
+document.getElementById('btnModsBack').onclick = () => { sfx.click(); closeModMenu(); };
+document.getElementById('btnMods').onclick = () => { sfx.click(); openModMenu(); };
+
+function placeCheckpoint() {
+  if (!run || runState !== 'playing' || !mods.practice) return;
+  if (!run.checkpoints) run.checkpoints = [];
+  if (run.checkpoints.length >= 50) { flashToast('Checkpoint limit reached (50)'); return; }
+  run.checkpoints.push({ player: { ...run.player }, camX: run.camX });
+  flashToast('Checkpoint ' + run.checkpoints.length + '/50');
+  sfx.click();
+}
+function clearCheckpoint() {
+  if (!mods.practice || !run || !run.checkpoints) return;
+  if (run.checkpoints.length === 0) { flashToast('No checkpoint'); return; }
+  run.checkpoints.pop();
+  flashToast('Checkpoint removed (' + run.checkpoints.length + ' left)');
+  sfx.click();
+}
+
+/* ---------------- Editor ---------------- */
+let editorCam = 0;
+let brush = 'spike';
+let editorObjects = [];
+let editorHelp = false;
+
+function editorInit() {
+  editorObjects = customLevel.length ? JSON.parse(JSON.stringify(customLevel)) : [];
+  editorCam = 0;
+  document.getElementById('editorToolbar').classList.remove('hidden');
+}
+function editorExit() {
+  document.getElementById('editorToolbar').classList.add('hidden');
+  toMenu();
+}
+function setBrush(b) {
+  brush = b;
+  document.querySelectorAll('.toolbtn').forEach(t => t.classList.toggle('active', t.dataset.brush === b));
+}
+document.querySelectorAll('.toolbtn').forEach(t => {
+  if (t.dataset.shape) return;
+  t.onclick = () => { sfx.click(); setBrush(t.dataset.brush); };
+});
+document.getElementById('btnTest').onclick = () => { sfx.click(); editorTest(); };
+document.getElementById('btnSave').onclick = () => {
+  sfx.click();
+  customLevel = JSON.parse(JSON.stringify(editorObjects));
+  store.set('gd_custom', customLevel);
+  flashToast('Level saved!');
+};
+document.getElementById('btnClear').onclick = () => {
+  sfx.click();
+  editorObjects = [];
+  flashToast('Cleared');
+};
+document.getElementById('btnRate').onclick = () => { sfx.click(); openRatePanel(); };
+document.getElementById('btnBackEditor').onclick = () => { sfx.click(); editorExit(); };
+
+function flashToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);z-index:50;background:rgba(0,229,255,0.9);color:#000;padding:10px 20px;border-radius:20px;font-weight:800;transition:opacity .8s;';
+  document.body.appendChild(t);
+  setTimeout(() => t.style.opacity = '0', 900);
+  setTimeout(() => t.remove(), 1800);
+}
+
+function editorTest() {
+  document.getElementById('editorToolbar').classList.add('hidden');
+  hud(true);
+  screen = 'play';
+  document.getElementById('hudLevel').textContent = 'Testing — My Level (' + DIFFS[difficulty].label + ')';
+  startRun({ name: 'My Level', speed: 320, objects: JSON.parse(JSON.stringify(editorObjects)), key: 'custom' }, DIFFS[difficulty]);
+  updateBestHUD();
+  updatePracticeHint();
+}
+
+function editorPlace() {
+  const gx = Math.floor((mouse.x + editorCam) / CELL);
+  const gy = Math.max(0, Math.min(8, Math.floor((GROUND_Y - CELL - mouse.y) / CELL)));
+  if (brush === 'eraser') {
+    editorObjects = editorObjects.filter(o0 => !(o0.x === gx && o0.y === gy));
+    return;
+  }
+  let idx = editorObjects.findIndex(o0 => (o0.t === 'finish' && brush === 'finish' && o0.t === brush) || (o0.x === gx && o0.y === gy && o0.t === brush));
+  if (brush === 'finish') {
+    editorObjects = editorObjects.filter(o0 => o0.t !== 'finish');
+    editorObjects.push({ x: gx, y: gy, t: 'finish' });
+    return;
+  }
+  editorObjects = editorObjects.filter(o0 => !(o0.x === gx && o0.y === gy));
+  editorObjects.push({ x: gx, y: gy, t: brush });
+}
+
+function toggleHelp() {
+  editorHelp = !editorHelp;
+  flashToast(editorHelp ? 'Help: click to place. < > or scroll to move. R=eraser' : 'Help off');
+}
+
+/* ---------------- Physics ---------------- */
+const G = 2700, JUMP_V = 820, PAD_V = 1550, MAX_FALL = 1600;
+
+function updateRun(dt) {
+  updateParts(dt);
+  const p = run.player;
+  const speed = run.level.speed * run.diff.speed * mods.speed * (mods.reverse ? -1 : 1);
+
+  if (runState === 'dying') {
+    deathTimer -= dt;
+    if (deathTimer <= 0) {
+      if (mods.practice && run.checkpoints && run.checkpoints.length) {
+        const cp = run.checkpoints[run.checkpoints.length - 1];
+        Object.assign(run.player, cp.player);
+        run.camX = cp.camX;
+        run.padCd = 0;
+        run.trail = [];
+        runState = 'playing';
+        deathTimer = 0;
+      } else {
+        startRun(run.level, run.diff);
+      }
+    }
+    return;
+  }
+  if (runState === 'won') {
+    p.x += speed * dt;
+    winTimer -= dt;
+    if (winTimer <= 0) toMenu();
+    return;
+  }
+
+  // horizontal (camera-driven forward)
+  p.x += speed * dt;
+  p.airTime += dt;
+
+  // gravity with jump-hold
+  let g = G * mods.gravity;
+  if (jumpHeld && p.vy < 0) g *= 0.5;
+  p.vy = Math.min(p.vy + g * dt, MAX_FALL);
+  const prevBottom = p.y + CELL;
+
+  p.y += p.vy * dt;
+
+  // ground
+  p.grounded = false;
+  if (p.y >= GROUND_Y - CELL) {
+    p.y = GROUND_Y - CELL; p.vy = 0; p.grounded = true; p.airTime = 0;
+  }
+
+  const pbox = [p.x - 22, p.y, 44, 44];
+  const near = run.obj.filter(o0 => Math.abs(o0.x * CELL - p.x) < CELL * 3);
+
+  // frame-perfect detection (noclip off)
+  if (!mods.noclip && run.fpMap) {
+    const prevX = p.x - speed * dt;
+    const sweepW = Math.abs(p.x - prevX) + 44;
+    // 1) swept tunnel: hazard fully crossed between two frames
+    if (sweepW > 46) {
+      const sweepBox = [Math.min(prevX, p.x) - 22, p.y, sweepW, 44];
+      for (const obj2 of near) {
+        if (obj2.t !== 'spike' && obj2.t !== 'block') continue;
+        const r2 = objRect(obj2);
+        if (!aabb(sweepBox, r2)) continue;
+        if (!aabb([prevX - 22, p.y, 44, 44], r2) && !aabb([p.x - 22, p.y, 44, 44], r2)) {
+          framePerfectEarned();
+          break;
+        }
+      }
+    }
+    // 2) tight near-miss: passing over a spike with tiny clearance
+    const hitProx = CELL / 2 + 22;
+    for (const obj3 of near) {
+      if (obj3.t !== 'spike') continue;
+      let st = run.fpMap.get(obj3);
+      if (!st) { st = { minGap: Infinity, seen: false, rewarded: false }; run.fpMap.set(obj3, st); }
+      const dx = p.x - (obj3.x * CELL + CELL / 2);
+      if (!st.seen && Math.abs(dx) <= hitProx) st.seen = true;
+      if (st.seen) {
+        const hitTop = objRect(obj3)[1];
+        const boxBottom = p.y + 44;
+        if (boxBottom <= hitTop) { const gap = hitTop - boxBottom; if (gap < st.minGap) st.minGap = gap; }
+      }
+      if (st.seen && !st.rewarded && dx < -hitProx && st.minGap <= 2.5) {
+        st.rewarded = true;
+        framePerfectEarned();
+      }
+    }
+  }
+
+  let hitPad = false;
+
+  for (const obj of near) {
+    const r = objRect(obj);
+    if (!aabb(pbox, r)) continue;
+    switch (obj.t) {
+      case 'block': {
+        // landing from above
+        if (p.vy >= 0 && prevBottom <= r[1] + 10) {
+          p.y = r[1] - CELL; p.vy = 0; p.grounded = true; p.airTime = 0;
+        } else if (p.vy < 0) {
+          p.y = r[1] + r[3]; p.vy = 0;
+        } else {
+          if (!mods.noclip) { die(); }
+          return;
+        }
+        break;
+      }
+      case 'platform': {
+        if (p.vy >= 0 && prevBottom <= r[1] + 10) {
+          p.y = r[1] - CELL; p.vy = 0; p.grounded = true; p.airTime = 0;
+        }
+        break;
+      }
+      case 'spike': { if (!mods.noclip) { die(); return; } break; }
+      case 'pad': {
+        if (run.padCd <= 0) {
+          p.vy = -PAD_V * mods.jump; p.grounded = false; run.padCd = 0.35; hitPad = true;
+          sfx.pad();
+        }
+        break;
+      }
+      case 'finish': {
+        if (!mods.skipEnd) { win(); }
+        return;
+      }
+    }
+  }
+
+  run.padCd -= dt;
+  if (hitPad) run.padCd = 0.35;
+
+  // hold to jump: auto-jump when landing while the button is held
+  if (settings.autoJump && jumpHeld && (p.grounded || mods.infJump)) {
+    p.vy = -run.jv * mods.jump;
+    p.grounded = false;
+    sfx.jump();
+  }
+
+  // rotation
+  if (p.grounded) {
+    const target = Math.round(p.rot / (Math.PI / 2)) * (Math.PI / 2);
+    p.rot += (target - p.rot) * Math.min(1, dt * 18);
+  } else {
+    p.rot += 5.5 * dt;
+  }
+
+  // trail
+  run.trail.push({ x: p.x, y: p.y + CELL - 6 });
+  if (run.trail.length > 55) run.trail.shift();
+
+  // camera
+  run.camX = mods.followCam ? p.x - 230 : Math.max(0, p.x - 230);
+}
+
+function framePerfectEarned() {
+  fpStats.count = (fpStats.count || 0) + 1;
+  store.set('gd_fp', fpStats);
+  const el = document.getElementById('fpToast');
+  el.textContent = 'FRAME PERFECT! x' + fpStats.count;
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  spawnBurst(run.player.x + 20, run.player.y - 8, 26, ['#7dffa8', '#00e5ff', '#ffffff']);
+  sfx.pad();
+}
+
+function die() {
+  if (runState !== 'playing') return;
+  if (mods.practice && run.checkpoints && run.checkpoints.length) {
+    runState = 'dying';
+    deathTimer = 0.3;
+    if (settings.shake) shakeT = 0.2;
+    spawnBurst(run.player.x, run.player.y + CELL / 2, 20, [icon.p, icon.t, '#ffffff']);
+    sfx.death();
+    return;
+  }
+  runState = 'dying';
+  deathTimer = 0.55;
+  const key = run.level.key || 'custom';
+  const p = currentProg();
+  if (p > (bests[key] || 0)) {
+    bests[key] = p;
+    store.set('gd_bests', bests);
+    flashToast('NEW BEST: ' + (p >= 100 ? '100%' : p + '%'));
+    updateBestHUD();
+  }
+  if (settings.shake) shakeT = 0.35;
+  spawnBurst(run.player.x, run.player.y + CELL / 2, 45, [icon.p, icon.s, icon.t, '#ff4d6d', '#ffffff']);
+  sfx.death();
+}
+function win() {
+  if (runState !== 'playing') return;
+  runState = 'won';
+  winTimer = 2.6;
+  const key = run.level.key || 'custom';
+  if ((bests[key] || 0) < 100) {
+    bests[key] = 100;
+    store.set('gd_bests', bests);
+    flashToast('NEW BEST: 100%');
+    updateBestHUD();
+  }
+  sfx.win();
+  spawnBurst(run.player.x, run.player.y + CELL / 2, 30, [icon.p, icon.t, '#ffffff']);
+  for (let i = 0; i < 5; i++) spawnBurst(run.player.x + i * 60 - 160, GROUND_Y - 80 - (i % 3) * 50, 14, ['#00e5ff', '#ff6ec7', '#ffd000', '#00ffa3']);
+  const ws = document.getElementById('winScreen');
+  ws.classList.remove('hidden');
+  ws.classList.add('active');
+}
+window.addEventListener('keydown', (e) => {
+  if (runState === 'won') { closeWin(); toMenu(); }
+});
+
+/* ---------------- SecretOS ---------------- */
+let secDrag = null;
+let pwArmId = null;
+let pwArmTimer = null;
+const secosPanels = {};
+
+function toggleSecOS() {
+  if (secosPanels.started) closeSecOS(); else openSecOS();
+}
+function openSecOS() {
+  secosPanels.started = true;
+  const so = document.getElementById('settingsOverlay');
+  so.classList.add('hidden'); so.classList.remove('active');
+  document.getElementById('secos').classList.remove('hidden');
+  document.getElementById('secos').classList.add('active');
+}
+function closeSecOS() {
+  secosPanels.started = false;
+  document.getElementById('secos').classList.add('hidden');
+  document.getElementById('secos').classList.remove('active');
+  document.getElementById('secosWin').innerHTML = '';
+  document.getElementById('secosTasks').innerHTML = '';
+  document.getElementById('secosStartMenu').classList.add('hidden');
+  document.getElementById('secPower').classList.add('hidden');
+  document.getElementById('secRecovery').classList.add('hidden');
+  document.getElementById('secBoot').classList.add('hidden');
+  document.getElementById('secretBtn').classList.add('hidden');
+  if (screen === 'settings') {
+    document.getElementById('settingsOverlay').classList.remove('hidden');
+    document.getElementById('settingsOverlay').classList.add('active');
+  }
+}
+function secosWin(id, title, bodyHTML, x, y) {
+  const w = document.createElement('div');
+  w.className = 'secos-win';
+  w.style.left = (x || 60) + 'px';
+  w.style.top = (y || 60) + 'px';
+  w.innerHTML = '<div class="titlebar">' + title + '<button class="x" data-close>X</button></div><div class="body">' + bodyHTML + '</div>';
+  document.getElementById('secosWin').appendChild(w);
+  const bar = w.querySelector('.titlebar');
+  bar.addEventListener('pointerdown', (e) => {
+    if (e.target.dataset.close) return;
+    secDrag = { win: w, dx: e.clientX - w.offsetLeft, dy: e.clientY - w.offsetTop };
+    bar.setPointerCapture(e.pointerId);
+  });
+  bar.addEventListener('pointermove', (e) => {
+    if (!secDrag || secDrag.win !== w) return;
+    w.style.left = Math.max(0, e.clientX - secDrag.dx) + 'px';
+    w.style.top = Math.max(0, e.clientY - secDrag.dy) + 'px';
+  });
+  bar.addEventListener('pointerup', () => { if (secDrag && secDrag.win === w) secDrag = null; });
+  w.querySelector('[data-close]').onpointerdown = (e) => { e.stopPropagation(); e.preventDefault(); w.remove(); removeTask(id); };
+  const task = document.createElement('button');
+  task.className = 'secos-task';
+  task.textContent = title;
+  task.onclick = () => { w.style.display = 'flex'; w.style.zIndex = ++secosZ; };
+  task.dataset.task = id;
+  document.getElementById('secosTasks').appendChild(task);
+}
+let secosZ = 10;
+function removeTask(id) {
+  const tasks = document.querySelectorAll('#secosTasks .secos-task');
+  tasks.forEach(t => { if (t.dataset.task === id) t.remove(); });
+}
+function toggleStartMenu() {
+  document.getElementById('secosStartMenu').classList.toggle('hidden');
+}
+function hideStartMenu() {
+  document.getElementById('secosStartMenu').classList.add('hidden');
+}
+document.querySelectorAll('#secosStartMenu [data-startapp]').forEach(btn => {
+  btn.onclick = () => { sfx.click(); hideStartMenu(); secosApp(btn.dataset.startapp); };
+});
+document.getElementById('secosDesktop').addEventListener('pointerdown', (e) => {
+  const m = document.getElementById('secosStartMenu');
+  if (m.classList.contains('hidden')) return;
+  if (!m.contains(e.target) && e.target.id !== 'secosStart') m.classList.add('hidden');
+});
+document.querySelectorAll('#secosIcons .secos-icon').forEach(btn => {
+  btn.onclick = () => { sfx.click(); secosApp(btn.dataset.app); };
+});
+function secosApp(app) {
+  const x = 60 + (Object.keys(secosPanels).length % 5) * 34;
+  const y = 50 + (Object.keys(secosPanels).length % 5) * 34;
+  if (app === 'about') {
+    const pid = 'about' + Date.now();
+    secosPanels[pid] = true;
+    const who = session && session.name ? session.name + ' (' + session.role + ')' : 'guest';
+    const bestArr = Object.values(bests);
+    const top = bestArr.length ? Math.max.apply(null, bestArr) : 0;
+    secosWin(pid, 'About', '<div class="about-line"><b>SecretOS 1.0</b><br><br>Welcome to the OS hidden inside the game.settings.<br><br>User: <b>' + who + '</b><br>Best progress: <b>' + top + '%</b><br>Levels: <b>' + LEVELS.length + '</b><br>Levels beaten: <b>' + bestArr.filter(v => v >= 100).length + '</b><br>Mods: <b>' + Object.values(mods).filter(Boolean).length + '</b><br>Frame-perfect passes: <b>' + (fpStats.count || 0) + '</b><br><br>Power commands? Run server\\terminal.bat outside the game.</div>', x, y);
+  } else if (app === 'game') {
+    const pid = 'game' + Date.now();
+    secosPanels[pid] = true;
+    secosWin(pid, '# Dot Hunt', '<div id="gameHud"><span id="gameScore">Score: 0</span><span id="gameTime">30</span></div><div id="gameArea"><div id="gameDot"></div></div>', x, y);
+    startDotGame();
+  }
+}
+function startDotGame() {
+  const area = document.getElementById('gameArea');
+  const dot = document.getElementById('gameDot');
+  if (!area || !dot) return;
+  let score = 0, time = 30;
+  const scoreEl = document.getElementById('gameScore');
+  const timeEl = document.getElementById('gameTime');
+  const pos = () => {
+    dot.style.left = (Math.random() * (area.clientWidth - 24)) + 'px';
+    dot.style.top = (Math.random() * (area.clientHeight - 24)) + 'px';
+  };
+  pos();
+  const iv = setInterval(() => {
+    if (!document.getElementById('gameArea')) { clearInterval(iv); return; }
+    time--;
+    timeEl.textContent = time;
+    if (time <= 0) { clearInterval(iv); dot.style.visibility = 'hidden'; scoreEl.textContent = 'Final: ' + score; }
+  }, 1000);
+  dot.onclick = (e) => {
+    e.stopPropagation();
+    if (time <= 0) return;
+    score++; scoreEl.textContent = 'Score: ' + score; sfx.click(); pos();
+  };
+  area.onclick = () => { if (time > 0) { score = 0; scoreEl.textContent = 'Score: 0'; } };
+}
+document.getElementById('secosPower').onclick = () => { sfx.click(); hideStartMenu(); showPower(); };
+function hideOverlay(el) { el.classList.add('hidden'); }
+function showPower() { document.getElementById('secPower').classList.remove('hidden'); }
+function hidePower() {
+  unarmPower();
+  document.getElementById('secPower').classList.add('hidden');
+}
+function unarmLabel(el, lbl) { if (el.textContent !== lbl) el.textContent = lbl; }
+function unarmPower() {
+  pwArmId = null;
+  clearTimeout(pwArmTimer);
+  unarmLabel(document.getElementById('pwRealRestart'), 'Real Restart');
+  unarmLabel(document.getElementById('pwRealShutdown'), 'Real Shut down');
+  unarmLabel(document.getElementById('pwRealRecovery'), 'Real Recovery');
+}
+function armReal(btn, lbl) {
+  if (pwArmId === btn.id) { unarmPower(); return true; }
+  unarmPower();
+  pwArmId = btn.id;
+  btn.textContent = 'Confirm? (click again)';
+  pwArmTimer = setTimeout(() => { unarmPower(); }, 4000);
+  return false;
+}
+function shutdownSecOS() { hidePower(); closeSecOS(); }
+function restartSecOS() {
+  hidePower();
+  document.getElementById('secRecovery').classList.add('hidden');
+  document.getElementById('secosWin').innerHTML = '';
+  document.getElementById('secosTasks').innerHTML = '';
+  const fill = document.getElementById('secBootFill');
+  fill.style.animation = 'none';
+  void fill.offsetWidth;
+  fill.style.animation = 'secBootFillAnim .9s forwards';
+  document.getElementById('secBoot').classList.remove('hidden');
+  setTimeout(() => { document.getElementById('secBoot').classList.add('hidden'); }, 1300);
+}
+function bootRecovery() { hidePower(); document.getElementById('secRecovery').classList.remove('hidden'); }
+function backFromRecovery() { document.getElementById('secRecovery').classList.add('hidden'); }
+function leaveRecovery() { document.getElementById('secRecovery').classList.add('hidden'); closeSecOS(); }
+function safeBoot() {
+  Object.assign(mods, { noclip: false, infJump: false, gravity: 1, speed: 1, jump: 1, reverse: false, skipEnd: false, followCam: false, practice: false });
+  store.set('gd_mods', mods);
+  document.getElementById('rcMsg').textContent = 'Safe mode active: all mods disabled.';
+  backFromRecovery();
+  restartSecOS();
+}
+function restoreDefaults() {
+  Object.assign(mods, { noclip: false, infJump: false, gravity: 1, speed: 1, jump: 1, reverse: false, skipEnd: false, followCam: false, practice: false });
+  store.set('gd_mods', mods);
+  store.set('gd_bests', {});
+  store.set('gd_settings', { musicOn: true, musicVol: 0.6, sfxVol: 0.8, shake: true, particles: true, autoJump: false });
+  document.getElementById('secRecovery').classList.add('hidden');
+  closeSecOS();
+}
+document.getElementById('pwShutdown').onclick = () => { sfx.click(); shutdownSecOS(); };
+document.getElementById('pwRestart').onclick = () => { sfx.click(); restartSecOS(); };
+async function doRealAction(action, lbl) {
+  hidePower();
+  const boot = document.getElementById('secBoot');
+  const fill = document.getElementById('secBootFill');
+  fill.style.animation = 'none';
+  void fill.offsetWidth;
+  fill.style.animation = 'secBootFillAnim .9s forwards';
+  boot.classList.remove('hidden');
+  const r = await api('/api/power-action', 'POST', { action: action });
+  if (r.ok) {
+    flashToast(lbl + ' in 3 seconds...');
+  } else {
+    boot.classList.add('hidden');
+    closeSecOS();
+    flashToast('Server offline — could not power your PC');
+  }
+}
+document.getElementById('pwRealRestart').onclick = () => {
+  sfx.click();
+  if (!armReal(document.getElementById('pwRealRestart'), 'Real Restart')) return;
+  doRealAction('restart', 'Restarting your PC');
+};
+document.getElementById('pwRealShutdown').onclick = () => {
+  sfx.click();
+  if (!armReal(document.getElementById('pwRealShutdown'), 'Real Shut down')) return;
+  doRealAction('shutdown', 'Shutting down your PC');
+};
+document.getElementById('pwRealRecovery').onclick = () => {
+  sfx.click();
+  if (!armReal(document.getElementById('pwRealRecovery'), 'Real Recovery')) return;
+  doRealAction('recovery', 'Booting recovery');
+};
+document.getElementById('pwRecovery').onclick = () => { sfx.click(); bootRecovery(); };
+document.getElementById('pwCancel').onclick = () => { sfx.click(); hidePower(); };
+document.getElementById('rcSafe').onclick = () => { sfx.click(); safeBoot(); };
+document.getElementById('rcReset').onclick = () => { sfx.click(); restoreDefaults(); };
+document.getElementById('rcLeave').onclick = () => { sfx.click(); leaveRecovery(); };
+document.getElementById('rcBack').onclick = () => { sfx.click(); backFromRecovery(); };
+document.getElementById('secosStart').onclick = () => { sfx.click(); toggleStartMenu(); };
+document.getElementById('secosClose').onclick = () => { sfx.click(); closeSecOS(); };
+document.getElementById('secretBtn').onclick = () => { sfx.click(); openSecOS(); };
+
+window.addEventListener('keydown', (e) => {
+  if (secosPanels.started && e.key === 'Escape') {
+    e.preventDefault();
+    if (!document.getElementById('secRecovery').classList.contains('hidden')) backFromRecovery();
+    else if (!document.getElementById('secPower').classList.contains('hidden')) hidePower();
+    else closeSecOS();
+  }
+});
+
+/* ---------------- Rendering ---------------- */
+function drawSky() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#141430');
+  g.addColorStop(0.6, '#241a45');
+  g.addColorStop(1, '#3a1f5c');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawBackdrop(camX) {
+  ctx.save();
+  const off = (camX * 0.15) % 80;
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 2;
+  for (let x = -off; x < W; x += 80) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x - 200, H); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawGround(camX) {
+  // moving grid on the ground
+  const off = -(camX % 8);
+  ctx.fillStyle = '#13101f';
+  ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.beginPath();
+  ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y); ctx.stroke();
+  for (let x = off; x < W; x += 8) {
+    ctx.beginPath(); ctx.moveTo(x, GROUND_Y + 6); ctx.lineTo(x - 4, H); ctx.stroke();
+  }
+}
+
+function drawObject(obj) {
+  const x = obj.x * CELL, y = rowY(obj.y);
+  ctx.save();
+  switch (obj.t) {
+    case 'block': {
+      ctx.fillStyle = icon.p;
+      ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+      ctx.strokeStyle = icon.s;
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x + 5, y + 5, CELL - 10, CELL - 10);
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 9, y + 9, CELL - 18, CELL - 18);
+      break;
+    }
+    case 'spike': {
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y + CELL);
+      ctx.lineTo(x + CELL / 2, y + 2);
+      ctx.lineTo(x + CELL - 2, y + CELL);
+      ctx.closePath();
+      ctx.fillStyle = icon.s;
+      ctx.fill();
+      ctx.strokeStyle = icon.p;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      break;
+    }
+    case 'platform': {
+      ctx.fillStyle = icon.p;
+      ctx.fillRect(x, y, CELL, 16);
+      ctx.fillStyle = '#3a2f6e';
+      ctx.fillRect(x, y + 13, CELL, 3);
+      ctx.strokeStyle = icon.s;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x + 2, y + 2, CELL - 4, 12);
+      // under-glow dots
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      for (let i = 6; i < CELL - 6; i += 9) ctx.fillRect(x + i, y + 5, 4, 4);
+      break;
+    }
+    case 'pad': {
+      ctx.fillStyle = '#ffd000';
+      ctx.fillRect(x + 4, y + 12, CELL - 8, CELL - 12);
+      ctx.fillStyle = '#1a1a2e';
+      ctx.beginPath();
+      ctx.moveTo(x + 12, y + CELL - 10);
+      ctx.lineTo(x + CELL / 2, y + 12);
+      ctx.lineTo(x + CELL - 12, y + CELL - 10);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#630000';
+      ctx.fillRect(x + 10, y + 14, 4, CELL - 24);
+      ctx.fillRect(x - 10 + CELL - 10, y + 14, 4, CELL - 24);
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x + 4, y + 12, CELL - 8, CELL - 12);
+      break;
+    }
+    case 'finish': {
+      const top = GROUND_Y - CELL * 5;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, top, CELL, GROUND_Y - top);
+      ctx.fillStyle = '#111';
+      for (let py = top; py < GROUND_Y; py += 6) for (let px = x; px < x + CELL; px += 6) {
+        if (((px - x) / 6 + (py - top) / 6) % 2 === 0) ctx.fillRect(px, py, 6, 6);
+      }
+      ctx.strokeStyle = '#222'; ctx.lineWidth = 4;
+      ctx.strokeRect(x, top, CELL, GROUND_Y - top);
+      ctx.fillStyle = '#ff6ec7';
+      ctx.beginPath();
+      ctx.moveTo(x + 10, top); ctx.lineTo(x + CELL - 6, top + 16); ctx.lineTo(x + 10, top + 32);
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function drawCheckpoints() {
+  if (!mods.practice || !run.checkpoints) return;
+  for (const cp of run.checkpoints) {
+    const fx = cp.player.x, top = GROUND_Y - 42;
+    ctx.strokeStyle = '#0c6b2a';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(fx, GROUND_Y); ctx.lineTo(fx, top); ctx.stroke();
+    ctx.fillStyle = '#32e06a';
+    ctx.beginPath();
+    ctx.moveTo(fx, top);
+    ctx.lineTo(fx + 26, top + 10);
+    ctx.lineTo(fx, top + 20);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#0c6b2a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function drawPlayer(p) {
+  const cx = p.x, cy = p.y + CELL / 2;
+  // trail
+  const trail = run.trail;
+  for (let i = 1; i < trail.length; i++) {
+    const a = trail[i - 1], b = trail[i];
+    const k = i / trail.length;
+    ctx.strokeStyle = hexA(icon.t, k * 0.85);
+    ctx.lineWidth = 4 + k * 12;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  const sh = icon.sh;
+  if (sh === 'ball') {
+    ctx.rotate(p.rot);
+    ctx.fillStyle = icon.p;
+    ctx.beginPath(); ctx.arc(0, 0, 21, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = icon.s;
+    ctx.fillRect(-2.5, -18, 5, 36);
+  } else if (sh === 'ship') {
+    const t = Math.max(-0.5, Math.min(0.5, p.vy / 2000));
+    ctx.rotate(t * 0.6);
+    ctx.fillStyle = icon.p;
+    ctx.beginPath();
+    ctx.moveTo(-22, -14); ctx.lineTo(18, -14); ctx.lineTo(26, 0); ctx.lineTo(18, 14); ctx.lineTo(-22, 14);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = icon.s;
+    ctx.fillRect(-22, -20, 10, 8);
+  } else if (sh === 'star') {
+    ctx.fillStyle = icon.p;
+    starPath(0, 0, 24, 11, 5);
+    ctx.fill();
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = icon.s;
+    ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.rotate(p.rot);
+    ctx.fillStyle = icon.p;
+    ctx.fillRect(-20, -20, 40, 40);
+    ctx.strokeStyle = icon.s;
+    ctx.lineWidth = 5;
+    ctx.strokeRect(-15, -15, 30, 30);
+    ctx.fillStyle = icon.s;
+    ctx.fillRect(-11, -13, 22, 6);
+    ctx.fillRect(-11, 7, 22, 6);
+  }
+  ctx.restore();
+
+  // glow
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = icon.p;
+  ctx.beginPath(); ctx.arc(cx, cy, 34, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function starPath(cx, cy, outer, inner, points) {
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = (i * Math.PI) / points - Math.PI / 2;
+    if (i === 0) ctx.moveTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+    else ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+  }
+  ctx.closePath();
+}
+
+function hexA(hex, a) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+}
+
+function drawHitboxes(p) {
+  if (!mods.showHitboxes) return;
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.font = '10px Consolas, monospace';
+  run.obj.forEach(obj => {
+    if (obj.t === 'finish') return;
+    const r = objRect(obj);
+    const color = obj.t === 'spike' ? '#ff304f' : obj.t === 'block' ? '#4d9fff' : '#ffd000';
+    ctx.strokeStyle = color;
+    ctx.fillStyle = hexA(color, 0.14);
+    ctx.fillRect(r[0], r[1], r[2], r[3]);
+    ctx.strokeRect(r[0], r[1], r[2], r[3]);
+  });
+  const player = [p.x - 22, p.y, 44, 44];
+  ctx.strokeStyle = '#00e5ff';
+  ctx.fillStyle = 'rgba(0,229,255,0.12)';
+  ctx.fillRect(player[0], player[1], player[2], player[3]);
+  ctx.strokeRect(player[0], player[1], player[2], player[3]);
+  ctx.restore();
+}
+
+function drawPlay() {
+  const p = run.player;
+  drawSky();
+  drawBackdrop(run.camX);
+  ctx.save();
+  ctx.translate(-run.camX, 0);
+  drawGround(run.camX);
+  run.obj.forEach(drawObject);
+  drawPlayer(p);
+  drawHitboxes(p);
+  drawCheckpoints();
+  drawParts();
+  ctx.restore();
+
+  // death flash
+  if (runState === 'dying') {
+    ctx.fillStyle = 'rgba(255,40,60,' + (0.25 + 0.2 * Math.abs(Math.sin(deathTimer * 20))) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+  // progress bar
+  let prog = currentProg() / 100;
+  const wonPct = runState === 'won';
+  const barColor = wonPct ? '#00ffa3' : (prog >= 1 ? '#00ffa3' : icon.t);
+  if (wonPct) prog = 1;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(10, H - 14, W - 20, 6);
+  if (wonPct) { ctx.fillStyle = 'rgba(0,255,163,0.18)'; ctx.fillRect(10, H - 14, W - 20, 6); }
+  ctx.fillStyle = barColor;
+  ctx.fillRect(10, H - 14, (W - 20) * prog, 6);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(10, H - 14, W - 20, 6);
+  ctx.fillStyle = wonPct ? '#00ffa3' : 'rgba(255,255,255,0.85)';
+  ctx.font = '700 12px Segoe UI';
+  ctx.fillText((wonPct ? 100 : Math.round(prog * 100)) + '%', W - 52, H - 18);
+}
+
+/* ---------------- Editor render ---------------- */
+function drawEditor() {
+  drawSky();
+  ctx.save();
+  ctx.translate(-editorCam, 0);
+
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  const gStart = Math.floor(editorCam / CELL);
+  for (let gx = gStart; gx < gStart + Math.ceil(W / CELL) + 1; gx++) {
+    const x = gx * CELL;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, GROUND_Y); ctx.stroke();
+  }
+  for (let gy = 0; gy <= 9; gy++) {
+    const y = rowY(gy);
+    ctx.beginPath(); ctx.moveTo(editorCam, y); ctx.lineTo(editorCam + W, y); ctx.stroke();
+  }
+
+  drawGround(editorCam);
+  editorObjects.forEach(drawObject);
+
+  // brush ghost
+  if (mouse.y > 0) {
+    const gx = Math.floor((mouse.x + editorCam) / CELL);
+    const gy = Math.max(0, Math.min(8, Math.floor((GROUND_Y - CELL - mouse.y) / CELL)));
+    ctx.strokeStyle = 'rgba(0,229,255,0.8)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(gx * CELL, rowY(gy), CELL, brush === 'platform' ? 16 : CELL);
+  }
+
+  // start marker
+  ctx.fillStyle = '#00ffa3';
+  ctx.font = '700 14px Segoe UI';
+  ctx.fillText('START', 1 * CELL - 18, rowY(0) - 12);
+  ctx.fillStyle = 'rgba(0,255,163,0.3)';
+  ctx.fillRect(1 * CELL, rowY(0), CELL, 6);
+  ctx.restore();
+
+  // toolbar hint text at bottom
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '13px Segoe UI';
+  ctx.fillText('Place objects on the grid. Test to play, Save to keep, menu to return.', 14, H - 24);
+}
+
+/* ---------------- Menu / icons render ---------------- */
+function drawMenu() {
+  drawSky();
+  drawBackdrop((Date.now() * 0.02) % 3000);
+  // bouncing icon preview
+  const cx = W - 140, cy = H - 120;
+  const b = Math.sin(Date.now() / 220) * 40;
+  ctx.save();
+  ctx.translate(cx, cy - b);
+  ctx.fillStyle = icon.p;
+  ctx.fillRect(-22, -22, 44, 44);
+  ctx.strokeStyle = icon.s; ctx.lineWidth = 6;
+  ctx.strokeRect(-16, -16, 32, 32);
+  ctx.fillStyle = icon.s;
+  ctx.fillRect(-12, -14, 24, 7); ctx.fillRect(-12, 7, 24, 7);
+  ctx.restore();
+}
+
+function drawIcons() {
+  drawSky();
+  drawBackdrop(0);
+  // big preview
+  const cx = W / 2 - 60, cy = H / 2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = icon.p; ctx.strokeStyle = icon.s;
+  if (icon.sh === 'ball') {
+    ctx.beginPath(); ctx.arc(0, 0, 60, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(0, 0, 48, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(-6, -48); ctx.lineTo(-6, 48); ctx.stroke();
+  } else if (icon.sh === 'ship') {
+    ctx.beginPath();
+    ctx.moveTo(-64, -40); ctx.lineTo(52, -40); ctx.lineTo(74, 0); ctx.lineTo(52, 40); ctx.lineTo(-64, 40);
+    ctx.closePath(); ctx.fill();
+    ctx.lineWidth = 12; ctx.stroke();
+    ctx.fillStyle = icon.s; ctx.fillRect(-64, -56, 28, 22);
+  } else if (icon.sh === 'star') {
+    ctx.fillStyle = icon.p;
+    starPath(0, 0, 68, 30, 5); ctx.fill();
+    ctx.lineWidth = 10; ctx.stroke();
+    ctx.fillStyle = icon.s; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.roundRect(-60, -60, 120, 120, 12); ctx.fill();
+    ctx.lineWidth = 14; ctx.beginPath(); ctx.roundRect(-45, -45, 90, 90, 8); ctx.stroke();
+    ctx.fillStyle = icon.s;
+    ctx.fillRect(-34, -38, 68, 20); ctx.fillRect(-34, 18, 68, 20);
+  }
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '14px Segoe UI';
+  ctx.fillText('Pick colors and shape on the right. M = mute sound', W / 2 - 200, H - 30);
+}
+
+/* ---------------- Main loop ---------------- */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.033, (now - last) / 1000);
+  last = now;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (screen === 'play') {
+    if (!paused) updateRun(dt);
+    if (run && screen === 'play') {
+      if (settings.shake && shakeT > 0) {
+        shakeT -= dt;
+        const amp = Math.max(0, shakeT) * 60;
+        ctx.save();
+        ctx.translate((Math.random() * 2 - 1) * amp, (Math.random() * 2 - 1) * amp);
+        drawPlay();
+        ctx.restore();
+      } else {
+        drawPlay();
+      }
+      if (paused) {
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+  } else if (screen === 'editor') {
+    if (mouse.down) editorPlace();
+    let moved = false;
+    if (keys['ArrowLeft'] || keys['a']) { editorCam -= 600 * dt; moved = true; }
+    if (keys['ArrowRight'] || keys['d']) { editorCam += 600 * dt; moved = true; }
+    if (moved) mouse.down = false;
+    drawEditor();
+  } else if (screen === 'icons') {
+    drawIcons();
+  } else if (screen === 'settings') {
+    drawMenu();
+  } else {
+    drawMenu();
+  }
+
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- Boot ---------------- */
+document.addEventListener('pointerdown', audio, { once: false });
+buildLevelList();
+setBrush('spike');
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
