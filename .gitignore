@@ -1,0 +1,24 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Local secrets
+.env
+
+# Server logs & databases (ephemeral local data)
+server/*.log
+server/*.db
+server/*.db-journal
+server/*.db-wal
+server/*.db-shm
+
+# Terminal session token cache
+ge_terminal_token.txt
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Android platform tools (adb/fastboot) — accidental download, not part of the app
+platform-tools/
+platform-tools-latest-windows.zip
