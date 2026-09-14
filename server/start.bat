@@ -1,4 +1,8 @@
 @echo off
+if /i not "%1"=="minimized" (
+  start "" /min "%~f0" minimized
+  exit /b
+)
 title Geometry Dive Server
 cd /d "%~dp0"
 

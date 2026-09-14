@@ -6,11 +6,11 @@ npm-debug.log*
 .env
 
 # Server logs & databases (ephemeral local data)
-server/*.log
-server/*.db
-server/*.db-journal
-server/*.db-wal
-server/*.db-shm
+*.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Terminal session token cache
 ge_terminal_token.txt

@@ -266,6 +266,7 @@
 <div id="hud" class="hidden">
   <div id="hudLevel">Level</div>
   <div class="hint" id="bestText"></div>
+  <div class="hint" id="mpText">&nbsp;</div>
   <div class="hint">Space / Up / W / Click = Jump</div>
   <div class="hint">R = Restart &nbsp; P = Pause &nbsp; Esc = Menu &nbsp; M = Mute &nbsp; F2 = Mods</div>
   <div class="hint hidden" id="practiceText">Practice mode: C = checkpoint (max 50) &nbsp; X = remove</div>
@@ -766,9 +767,134 @@ let paused = false;
 function startRun(level, diff) {
   const d = diff || DIFFS.normal;
   const player = { x: CELL * 1.5, y: GROUND_Y - CELL, vy: 0, rot: 0, grounded: true, airTime: 0 };
-  run = { level, player, camX: 0, trail: [], padCd: 0, obj: level.objects, diff: d, jv: JUMP_V * d.jump, fpMap: new Map() };
+  run = { level, player, camX: 0, trail: [], padCd: 0, obj: level.objects, diff: d, jv: JUMP_V * d.jump, fpMap: new Map(), elapsed: 0, recSamples: [], sampleAcc: 0, lastMPSend: 0 };
+  ghosts.forEach(g => { g.idx = 0; g.pt = 0; });
   runState = 'playing';
   deathTimer = 0; winTimer = 0; paused = false;
+}
+
+/* ---------------- Multiplayer (ghosts + live) ---------------- */
+const MP_WS_URL = (location.protocol === 'file:') ? 'ws://localhost:3000/ws' : (location.protocol === 'https:' ? 'wss://' + location.host + '/ws' : 'ws://' + location.host + '/ws');
+let mpWs = null, mpRetry = 0, mpOnline = 0;
+let livePlayers = new Map();
+let ghosts = [];
+let ghostIdx = 0;
+const GHOST_COLORS = ['#00e5ff', '#ff6ec7', '#00ffa3'];
+const LIVE_COLORS = ['#ff6ec7', '#ffd000', '#a78bfa'];
+
+function mpConnect() {
+  if (mpWs && (mpWs.readyState === 0 || mpWs.readyState === 1)) return;
+  stopMp();
+  try { mpWs = new WebSocket(MP_WS_URL); } catch (e) { return; }
+  mpWs.onopen = () => {
+    mpRetry = 0;
+    const sess = store.get('gd_session', null);
+    const lv = run ? (run.level.key || 'custom') : 'none';
+    sendWs({ type: 'join', game: 'geometry-dash', level: lv, name: (sess && sess.name) || 'Anonymous' });
+    updateMpText();
+  };
+  mpWs.onmessage = (ev) => { try { mpHandle(JSON.parse(ev.data)); } catch (e) {} };
+  mpWs.onclose = () => {
+    mpWs = null; livePlayers.clear(); mpOnline = 0; updateMpText();
+    if (mpRetry < 3 && screen === 'play') { mpRetry++; setTimeout(mpConnect, 1500 * mpRetry); }
+  };
+  mpWs.onerror = () => { try { mpWs.close(); } catch (e) {} };
+}
+function stopMp() {
+  livePlayers.clear();
+  if (mpWs) { try { mpWs.onclose = null; mpWs.close(); } catch (e) {} mpWs = null; }
+  updateMpText();
+}
+function sendWs(obj) {
+  if (mpWs && mpWs.readyState === 1) { try { mpWs.send(JSON.stringify(obj)); } catch (e) {} }
+}
+function mpHandle(m) {
+  if (m.type === 'joined') { updateMpText(); }
+  else if (m.type === 'room') { mpOnline = m.count || 0; livePlayers.clear(); (m.players || []).forEach(pl => livePlayers.set(pl.id, pl)); updateMpText(); }
+  else if (m.type === 'pos') { livePlayers.set(m.id, m); }
+  else if (m.type === 'record') {
+    if (m.game === 'geometry-dash' && run && (run.level.key || 'custom') === m.level) {
+      flashToast(m.username + (m.complete ? ' beat ' + (run.level.name || 'level') + '!' : ' hit ' + m.score + '%'));
+    }
+  }
+}
+function updateMpText() {
+  const el = document.getElementById('mpText');
+  if (!el) return;
+  if (!run || screen !== 'play') { el.textContent = ''; return; }
+  const parts = [];
+  if (mpOnline > 0) parts.push('\uD83D\uDC65 ' + mpOnline + ' online');
+  if (ghosts.length) parts.push('\uD83D\uDC7B ' + ghosts.length + ' ghost');
+  el.textContent = parts.length ? parts.join(' · ') : '\u00A0';
+}
+async function loadGhosts(lv) {
+  const r = await api('/api/replays?game=geometry-dash&level=' + encodeURIComponent(lv.key || 'custom') + '&limit=3', 'GET');
+  ghosts = (r.ok && r.data.replays) ? r.data.replays.slice(0, 3).map((g) => ({
+    samples: (g.samples || []).filter(s => s.length >= 4),
+    username: g.username,
+    complete: g.complete,
+    score: g.score,
+    idx: 0,
+    pt: 0,
+    speed: (g.samples && g.samples.length && g.samples[0].length >= 4) ? g.samples[0][3] : 0
+  })) : [];
+  updateMpText();
+}
+async function uploadReplay(score, complete) {
+  if (!run || !run.recSamples || run.recSamples.length < 10) return;
+  if (!complete && score < 15) return;
+  const sess = store.get('gd_session', null);
+  api('/api/replays', 'POST', {
+    game: 'geometry-dash', level: run.level.key || 'custom',
+    durationMs: Math.round(run.elapsed * 1000), score, complete: complete ? 1 : 0,
+    samples: run.recSamples.map(s => [+Number(s[0]).toFixed(2), +Number(s[1]).toFixed(1), +Number(s[2]).toFixed(1), +Number(s[3]).toFixed(1)])
+  }, sess && sess.token).catch(() => {});
+}
+function drawGhosts() {
+  const p = run.player;
+  for (const g of ghosts) {
+    const smp = g.samples;
+    if (!smp || smp.length < 2) continue;
+    if (g.pt > (smp[smp.length - 1][0] || 0) + 0.3) continue;
+    let a = smp[0], b = smp[0];
+    for (let i = 0; i + 1 < smp.length; i++) {
+      if (smp[i + 1][0] <= g.pt) { a = smp[i + 1]; b = smp[i + 1]; continue; }
+      a = smp[i]; b = smp[i + 1]; break;
+    }
+    const span = Math.max(0.001, b[0] - a[0]);
+    const k = Math.max(0, Math.min(1, (g.pt - a[0]) / span));
+    const gx = a[1] + (b[1] - a[1]) * k;
+    const gy = a[2] + (b[2] - a[2]) * k;
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = GHOST_COLORS[ghosts.indexOf(g) % GHOST_COLORS.length];
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 3;
+    ctx.fillRect(gx - 20, gy, 40, 40);
+    ctx.strokeRect(gx - 20, gy, 40, 40);
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 10px Segoe UI';
+    ctx.fillText(g.username.slice(0, 12), gx - 20, gy - 6);
+    ctx.restore();
+  }
+  let li = 0;
+  for (const [, pl] of livePlayers) {
+    if (pl.status === 'dead' || pl.x == null || !isFinite(pl.x)) continue;
+    li++;
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = LIVE_COLORS[(li - 1) % LIVE_COLORS.length];
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 3;
+    ctx.fillRect(pl.x - 20, pl.y, 40, 40);
+    ctx.strokeRect(pl.x - 20, pl.y, 40, 40);
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 10px Segoe UI';
+    ctx.fillText(pl.name.slice(0, 12), pl.x - 20, pl.y - 6);
+    ctx.restore();
+  }
 }
 
 /* ---------------- Input ---------------- */
@@ -858,6 +984,7 @@ function toMenu() {
   screen = 'menu';
   run = null; runState = 'idle';
   hud(false);
+  stopMp();
   openMenu();
   closeWin();
   document.getElementById('pause').classList.add('hidden');
@@ -950,6 +1077,8 @@ function startLevel(lv) {
   startRun(lv, DIFFS[difficulty]);
   updateBestHUD();
   updatePracticeHint();
+  loadGhosts(lv);
+  mpConnect();
 }
 document.getElementById('btnPlay').onclick = () => {
   sfx.click();
@@ -1607,6 +1736,25 @@ function updateRun(dt) {
   const p = run.player;
   const speed = run.level.speed * run.diff.speed * mods.speed * (mods.reverse ? -1 : 1);
 
+  // multiplayer: advance ghosts + record this attempt + broadcast position
+  const mySp = Math.abs(speed) || 1;
+  for (const g of ghosts) {
+    if (g.speed > 0) g.pt += dt * (g.speed / mySp);
+  }
+  if (runState === 'playing') {
+    run.elapsed += dt;
+    run.sampleAcc += dt;
+    if (run.sampleAcc >= 1 / 30) {
+      run.sampleAcc -= 1 / 30;
+      if (run.recSamples.length < 3600) run.recSamples.push([+run.elapsed.toFixed(3), +p.x.toFixed(1), +p.y.toFixed(1), +speed.toFixed(1)]);
+    }
+    const nowT = performance.now();
+    if (nowT - run.lastMPSend > 200) {
+      run.lastMPSend = nowT;
+      sendWs({ type: 'pos', game: 'geometry-dash', level: run.level.key || 'custom', x: p.x, y: p.y, status: 'playing', progress: currentProg() });
+    }
+  }
+
   if (runState === 'dying') {
     deathTimer -= dt;
     if (deathTimer <= 0) {
@@ -1789,6 +1937,7 @@ function die() {
   if (settings.shake) shakeT = 0.35;
   spawnBurst(run.player.x, run.player.y + CELL / 2, 45, [icon.p, icon.s, icon.t, '#ff4d6d', '#ffffff']);
   sfx.death();
+  uploadReplay(currentProg(), false);
 }
 function win() {
   if (runState !== 'playing') return;
@@ -1807,6 +1956,7 @@ function win() {
   const ws = document.getElementById('winScreen');
   ws.classList.remove('hidden');
   ws.classList.add('active');
+  uploadReplay(100, true);
 }
 window.addEventListener('keydown', (e) => {
   if (runState === 'won') { closeWin(); toMenu(); }
@@ -2288,6 +2438,7 @@ function drawPlay() {
   drawGround(run.camX);
   run.obj.forEach(drawObject);
   drawPlayer(p);
+  drawGhosts();
   drawHitboxes(p);
   drawCheckpoints();
   drawParts();

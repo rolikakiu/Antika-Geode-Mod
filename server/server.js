@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { exec } = require('child_process');
 const nodemailer = require('nodemailer');
+const OpenAI = require('openai');
+const WebSocket = require('ws');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
@@ -45,6 +47,60 @@ ensureColumn('users', 'reset_created', 'INTEGER');
 ensureColumn('users', 'pending_email', 'TEXT');
 ensureColumn('users', 'pending_code', 'TEXT');
 ensureColumn('users', 'pending_created', 'INTEGER');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS game_saves (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  game TEXT NOT NULL DEFAULT 'text-adventure',
+  slot TEXT NOT NULL DEFAULT 'default',
+  state TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(user_id, game, slot)
+);
+CREATE TABLE IF NOT EXISTS bot_conversations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL DEFAULT 'New chat',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS bot_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS replays (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  username TEXT NOT NULL,
+  game TEXT NOT NULL,
+  level TEXT NOT NULL DEFAULT '',
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  score REAL NOT NULL DEFAULT 0,
+  complete INTEGER NOT NULL DEFAULT 0,
+  samples TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL
+);
+`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_replays_pick ON replays(game, level, complete DESC, score DESC)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_bot_conv_user ON bot_conversations(user_id, updated_at DESC)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_bot_msg_conv ON bot_messages(conversation_id, id ASC)');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS bans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  username TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  banned_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+`);
+
 
 /* ---------------- Password hashing ---------------- */
 function hashPass(p) {
@@ -102,6 +158,47 @@ async function sendCode(username, email, code) {
 }
 buildTransporter();
 
+/* ---------------- OpenAI / OpenRouter (textwithbots) ---------------- */
+let openai = null;
+let provider = 'openai';
+if (process.env.OPENAI_API_KEY) {
+  const key = process.env.OPENAI_API_KEY.trim();
+  if (key.startsWith('sk-or-v1-')) {
+    provider = 'openrouter';
+    openai = new OpenAI({
+      apiKey: key,
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': process.env.SITE_URL || 'https://geometry-extra.onrender.com',
+        'X-Title': process.env.APP_NAME || 'Geometry Extra'
+      }
+    });
+  } else {
+    openai = new OpenAI({ apiKey: key });
+  }
+}
+const BOT_MODEL = process.env.OPENAI_MODEL || (provider === 'openrouter' ? 'openai/gpt-4o-mini' : 'gpt-4o-mini');
+const BOT_SYSTEM_PROMPT =
+  'You are a friendly, helpful chatbot called Echo. ' +
+  'You chat with users casually and helpfully. ' +
+  'Keep responses concise and conversational, like a text message. ' +
+  'Use markdown sparingly for formatting.';
+function botMessages(rows) {
+  return rows.map(r => ({ role: r.role, content: r.content }));
+}
+async function askBot(history) {
+  if (!openai) throw new Error('Bot is not configured on the server yet');
+  const res = await openai.chat.completions.create({
+    model: BOT_MODEL,
+    messages: [{ role: 'system', content: BOT_SYSTEM_PROMPT }, ...history],
+    temperature: 0.7,
+    max_tokens: 1024
+  });
+  const text = res.choices?.[0]?.message?.content;
+  if (!text) throw new Error('Bot returned an empty response');
+  return text;
+}
+
 /* ---------------- App ---------------- */
 const app = express();
 app.use(cors());
@@ -121,6 +218,8 @@ function auth(req, res, next) {
     'SELECT u.id, u.username, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?'
   ).get(token);
   if (!row) return res.status(401).json({ error: 'Invalid session' });
+  const banned = db.prepare('SELECT id FROM bans WHERE user_id = ?').get(row.id);
+  if (banned) return res.status(403).json({ error: 'Account is banned' });
   req.user = { id: row.id, name: row.username, role: row.role };
   req.token = token;
   next();
@@ -322,6 +421,161 @@ app.post('/api/profile/password', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+/* --- Game saves --- */
+app.get('/api/saves', auth, (req, res) => {
+  const game = String(req.query.game || 'text-adventure');
+  const rows = db.prepare('SELECT id, slot, state, created_at, updated_at FROM game_saves WHERE user_id = ? AND game = ? ORDER BY updated_at DESC')
+    .all(req.user.id, game);
+  res.json({ saves: rows.map(r => ({ id: r.id, slot: r.slot, state: JSON.parse(r.state), createdAt: r.created_at, updatedAt: r.updated_at })) });
+});
+app.post('/api/saves', auth, (req, res) => {
+  const game = String(req.body?.game || 'text-adventure');
+  const slot = String(req.body?.slot || 'default');
+  const state = req.body?.state;
+  if (!state || typeof state !== 'object') return res.status(400).json({ error: 'Invalid state' });
+  const now = Date.now();
+  const json = JSON.stringify(state);
+  db.prepare(`INSERT INTO game_saves (user_id, game, slot, state, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(user_id, game, slot) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at`)
+    .run(req.user.id, game, slot, json, now, now);
+  res.json({ ok: true, updatedAt: now });
+});
+app.delete('/api/saves/:id', auth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Bad id' });
+  db.prepare('DELETE FROM game_saves WHERE id = ? AND user_id = ?').run(id, req.user.id);
+  res.json({ ok: true });
+});
+
+/* --- Textwithbots --- */
+function convJSON(r) {
+  return { id: r.id, title: r.title, createdAt: r.created_at, updatedAt: r.updated_at };
+}
+app.get('/api/bots/conversations', auth, (req, res) => {
+  const rows = db.prepare('SELECT id, title, created_at, updated_at FROM bot_conversations WHERE user_id = ? ORDER BY updated_at DESC')
+    .all(req.user.id);
+  res.json({ conversations: rows.map(convJSON) });
+});
+app.post('/api/bots/conversations', auth, (req, res) => {
+  const now = Date.now();
+  const info = db.prepare('INSERT INTO bot_conversations (user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)')
+    .run(req.user.id, 'New chat', now, now);
+  const row = db.prepare('SELECT id, title, created_at, updated_at FROM bot_conversations WHERE id = ?').get(info.lastInsertRowid);
+  res.json({ conversation: convJSON(row) });
+});
+app.delete('/api/bots/conversations/:id', auth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Bad id' });
+  db.prepare('DELETE FROM bot_messages WHERE conversation_id = ?').run(id);
+  db.prepare('DELETE FROM bot_conversations WHERE id = ? AND user_id = ?').run(id, req.user.id);
+  res.json({ ok: true });
+});
+function getOwnedConversation(userId, id) {
+  return db.prepare('SELECT id, title FROM bot_conversations WHERE id = ? AND user_id = ?').get(id, userId);
+}
+app.get('/api/bots/conversations/:id/messages', auth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Bad id' });
+  const conv = getOwnedConversation(req.user.id, id);
+  if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+  const rows = db.prepare('SELECT id, role, content, created_at FROM bot_messages WHERE conversation_id = ? ORDER BY id ASC').all(id);
+  res.json({ conversation: { id: conv.id, title: conv.title }, messages: rows.map(r => ({ id: r.id, role: r.role, content: r.content, createdAt: r.created_at })) });
+});
+app.post('/api/bots/conversations/:id/messages', auth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Bad id' });
+  const conv = getOwnedConversation(req.user.id, id);
+  if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+  const content = String(req.body?.content || '').trim();
+  if (!content) return res.status(400).json({ error: 'Message is empty' });
+  if (content.length > 4000) return res.status(400).json({ error: 'Message too long (4000 chars max)' });
+
+  const now = Date.now();
+  const userMsg = db.prepare('INSERT INTO bot_messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
+    .run(id, 'user', content, now);
+
+  const historyRows = db.prepare('SELECT role, content FROM bot_messages WHERE conversation_id = ? ORDER BY id ASC').all(id);
+  let replyText;
+  try {
+    replyText = await askBot(botMessages(historyRows));
+  } catch (e) {
+    console.error('Bot error:', e.message);
+    db.prepare('DELETE FROM bot_messages WHERE id = ?').run(userMsg.lastInsertRowid);
+    return res.status(502).json({ error: 'The bot could not respond right now: ' + e.message });
+  }
+
+  const botMsg = db.prepare('INSERT INTO bot_messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
+    .run(id, 'assistant', replyText, now);
+  db.prepare('UPDATE bot_conversations SET updated_at = ? WHERE id = ?').run(now, id);
+
+  let title = conv.title;
+  if (title === 'New chat') {
+    title = content.replace(/\s+/g, ' ').trim().slice(0, 40) + (content.length > 40 ? '…' : '');
+    if (!title) title = 'New chat';
+    db.prepare('UPDATE bot_conversations SET title = ? WHERE id = ?').run(title, id);
+  }
+
+  const userRow = db.prepare('SELECT id, role, content, created_at FROM bot_messages WHERE id = ?').get(userMsg.lastInsertRowid);
+  const botRow = db.prepare('SELECT id, role, content, created_at FROM bot_messages WHERE id = ?').get(botMsg.lastInsertRowid);
+  res.json({
+    userMessage: { id: userRow.id, role: userRow.role, content: userRow.content, createdAt: userRow.created_at },
+    botMessage: { id: botRow.id, role: botRow.role, content: botRow.content, createdAt: botRow.created_at },
+    title
+  });
+});
+
+/* --- Replays (multiplayer ghosts) --- */
+function softUser(req) {
+  const h = req.headers.authorization || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  if (!token) return { id: null, name: 'Anonymous' };
+  const row = db.prepare('SELECT u.id, u.username FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?').get(token);
+  return row ? { id: row.id, name: row.username } : { id: null, name: 'Anonymous' };
+}
+function replayJSON(r, withSamples) {
+  const j = { id: r.id, username: r.username, game: r.game, level: r.level, durationMs: r.duration_ms, score: r.score, complete: !!r.complete, createdAt: r.created_at };
+  if (withSamples) j.samples = JSON.parse(r.samples);
+  return j;
+}
+app.post('/api/replays', (req, res) => {
+  const who = softUser(req);
+  const game = String(req.body?.game || '').trim();
+  const level = String(req.body?.level || '').trim();
+  const samples = req.body?.samples;
+  const durationMs = Math.max(0, Math.round(Number(req.body?.durationMs) || 0));
+  const score = Math.max(0, Math.round(Number(req.body?.score) || 0));
+  const complete = req.body?.complete ? 1 : 0;
+  if (!game || game.length > 40) return res.status(400).json({ error: 'Bad game' });
+  if (level.length > 40) return res.status(400).json({ error: 'Bad level' });
+  if (!Array.isArray(samples) || samples.length < 2 || samples.length > 30000) return res.status(400).json({ error: 'Bad or empty samples' });
+  const info = db.prepare('INSERT INTO replays (user_id, username, game, level, duration_ms, score, complete, samples, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(who.id, who.name.slice(0, 16), game, level, durationMs, score, complete, JSON.stringify(samples), Date.now());
+  wsBroadcastRoom(game, level, { type: 'record', game, level, username: who.name.slice(0, 16), score, complete: !!complete });
+  res.json({ ok: true, id: Number(info.lastInsertRowid) });
+});
+app.get('/api/replays', (req, res) => {
+  const game = String(req.query.game || '').trim();
+  const level = String(req.query.level || '').trim();
+  const limit = Math.max(1, Math.min(20, parseInt(req.query.limit, 10) || 5));
+  if (!game || game.length > 40) return res.status(400).json({ error: 'Bad game' });
+  if (level.length > 40) return res.status(400).json({ error: 'Bad level' });
+  const rows = level
+    ? db.prepare('SELECT id, username, game, level, duration_ms, score, complete, samples, created_at FROM replays WHERE game = ? AND level = ? ORDER BY complete DESC, score DESC, duration_ms ASC LIMIT ?').all(game, level, limit)
+    : db.prepare('SELECT id, username, game, level, duration_ms, score, complete, samples, created_at FROM replays WHERE game = ? ORDER BY complete DESC, score DESC, duration_ms ASC LIMIT ?').all(game, limit);
+  res.json({ replays: rows.map(r => replayJSON(r, true)) });
+});
+app.delete('/api/replays/:id', (req, res) => {
+  const who = softUser(req);
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Bad id' });
+  const row = db.prepare('SELECT id, user_id FROM replays WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (who.id === null || (row.user_id !== null && row.user_id !== who.id)) return res.status(403).json({ error: 'Not your replay' });
+  db.prepare('DELETE FROM replays WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
 /* --- Saved accounts (device keychain) --- */
 function deviceOf(req) {
   return String(req.headers['x-device-id'] || '').trim().slice(0, 64) || 'unknown';
@@ -370,6 +624,61 @@ app.post('/api/promote', auth, (req, res) => {
   res.json({ ok: true, user: username, role: role });
 });
 
+/* --- Ban / Unban --- */
+app.post('/api/ban', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { username, reason } = req.body || {};
+  if (!username) return res.status(400).json({ error: 'username required' });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  if (u.id === req.user.id) return res.status(400).json({ error: 'Cannot ban yourself' });
+  const existing = db.prepare('SELECT id FROM bans WHERE user_id = ?').get(u.id);
+  if (existing) return res.status(400).json({ error: 'User already banned' });
+  db.prepare('INSERT INTO bans (user_id, username, reason, banned_by, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(u.id, username, String(reason || ''), req.user.name, Date.now());
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+  kickUserById(u.id);
+  res.json({ ok: true, user: username });
+});
+app.post('/api/unban', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { username } = req.body || {};
+  if (!username) return res.status(400).json({ error: 'username required' });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  db.prepare('DELETE FROM bans WHERE user_id = ?').run(u.id);
+  res.json({ ok: true, user: username });
+});
+app.get('/api/bans', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const rows = db.prepare('SELECT id, username, reason, banned_by, created_at FROM bans ORDER BY created_at DESC').all();
+  res.json({ bans: rows.map(r => ({ id: r.id, username: r.username, reason: r.reason, bannedBy: r.banned_by, createdAt: r.created_at })) });
+});
+
+/* --- Kick (disconnect WebSocket) --- */
+const wsClients = new Map(); // user_id -> Set of WebSocket connections
+app.post('/api/kick', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { username } = req.body || {};
+  if (!username) return res.status(400).json({ error: 'username required' });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  const kicked = kickUserById(u.id);
+  res.json({ ok: true, user: username, kicked });
+});
+function kickUserById(userId) {
+  const conns = wsClients.get(userId);
+  if (!conns || conns.size === 0) return 0;
+  let count = 0;
+  for (const ws of conns) {
+    try { wsSend(ws, { type: 'kicked', reason: 'Kicked by admin' }); } catch (e) {}
+    try { ws.close(4001, 'Kicked by admin'); } catch (e) {}
+    count++;
+  }
+  wsClients.delete(userId);
+  return count;
+}
+
 /* --- Power actions (SecretOS, local machine only) --- */
 app.post('/api/power-action', (req, res) => {
   if (IS_PROD) return res.status(403).json({ error: 'Power actions are disabled on this server' });
@@ -390,12 +699,114 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Server error' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log('Geometry Extra server running at http://localhost:' + PORT);
   console.log('Game: http://localhost:' + PORT + '/geometry-dash.html');
   console.log(mailDev
     ? 'EMAIL STATUS: dev mode — codes are printed to this console'
     : 'EMAIL STATUS: real SMTP configured');
+});
+
+/* ---------------- Multiplayer WebSocket (/ws) ---------------- */
+const liveRooms = new Map(); // key "game|level" -> Map(client, state)
+
+function wsSend(ws, obj) {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+function wsBroadcastRoom(game, level, obj) {
+  const key = game + '|' + (level || '');
+  const room = liveRooms.get(key);
+  if (!room) return;
+  for (const [ws, st] of room) wsSend(ws, obj);
+}
+function roomSnapshot(key) {
+  const room = liveRooms.get(key);
+  if (!room) return null;
+  const players = [];
+  let count = 0;
+  for (const [, st] of room) {
+    count++;
+    if (st.x != null) players.push({ id: st.id, name: st.name, x: st.x, y: st.y, status: st.status, progress: st.progress });
+  }
+  return { type: 'room', count, players };
+}
+function pushRoom(key) {
+  const snap = roomSnapshot(key);
+  if (!snap) return;
+  const room = liveRooms.get(key);
+  const [game, level] = key.split('|');
+  snap.game = game;
+  snap.level = level;
+  for (const ws of room.keys()) wsSend(ws, snap);
+}
+function liveRoomKey(st) {
+  return st.game && st.level != null ? st.game + '|' + st.level : null;
+}
+
+const wss = new WebSocket.Server({ server, path: '/ws' });
+wss.on('connection', (ws, req) => {
+  const st = { id: crypto.randomBytes(3).toString('hex'), userId: null, game: null, level: null, name: 'Unknown', x: null, y: null, status: 'playing', progress: 0, lastSent: 0, lastJoined: 0 };
+  ws.on('message', (buf) => {
+    let msg;
+    try { msg = JSON.parse(buf.toString()); } catch (e) { return; }
+    if (msg.type === 'auth') {
+      const token = String(msg.token || '');
+      const row = db.prepare('SELECT u.id, u.username FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?').get(token);
+      if (row) {
+        st.userId = row.id;
+        st.name = row.username;
+        if (!wsClients.has(row.id)) wsClients.set(row.id, new Set());
+        wsClients.get(row.id).add(ws);
+      }
+      return;
+    }
+    if (msg.type === 'join') {
+      const game = String(msg.game || '').trim();
+      const level = (msg.level == null ? '' : String(msg.level)).trim();
+      if (!game || game.length > 40 || level.length > 40) return;
+      const oldKey = liveRoomKey(st);
+      if (oldKey) {
+        const oldRoom = liveRooms.get(oldKey);
+        if (oldRoom) { oldRoom.delete(ws); if (oldRoom.size === 0) liveRooms.delete(oldKey); else pushRoom(oldKey); }
+      }
+      st.game = game;
+      st.level = level;
+      st.name = String(msg.name || st.name || 'Anonymous').slice(0, 16);
+      st.x = null; st.y = null; st.status = 'playing'; st.progress = 0;
+      const key = game + '|' + level;
+      if (!liveRooms.has(key)) liveRooms.set(key, new Map());
+      liveRooms.get(key).set(ws, st);
+      wsSend(ws, { type: 'joined', game, level, yourName: st.name });
+      pushRoom(key);
+    } else if (msg.type === 'pos') {
+      if (!st.game) return;
+      const now = Date.now();
+      if (now - st.lastSent < 120) return;
+      st.lastSent = now;
+      st.name = String(st.name || 'Anonymous').slice(0, 16);
+      if (typeof msg.x === 'number' && typeof msg.y === 'number') { st.x = Math.round(msg.x * 10) / 10; st.y = Math.round(msg.y * 10) / 10; }
+      st.status = ['playing', 'dead', 'won'].includes(msg.status) ? msg.status : 'playing';
+      st.progress = Math.max(0, Math.min(100, Math.round(Number(msg.progress) || 0)));
+      const key = liveRoomKey(st);
+      if (key) wsBroadcastRoom(st.game, st.level, {
+        type: 'pos', id: st.id, name: st.name, x: st.x, y: st.y, status: st.status, progress: st.progress
+      });
+    }
+  });
+  ws.on('close', () => {
+    if (st.userId && wsClients.has(st.userId)) {
+      wsClients.get(st.userId).delete(ws);
+      if (wsClients.get(st.userId).size === 0) wsClients.delete(st.userId);
+    }
+    const key = liveRoomKey(st);
+    if (!key) return;
+    const room = liveRooms.get(key);
+    if (!room) return;
+    room.delete(ws);
+    if (room.size === 0) liveRooms.delete(key);
+    else pushRoom(key);
+  });
+  ws.on('error', () => {});
 });
 
 /* ---------------- Optional admin seed ---------------- */
