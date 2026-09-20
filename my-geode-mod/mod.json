@@ -4,13 +4,13 @@
         "win": "2.2081",
         "android": "2.2081"
     },
-    "id": "antika.mod.geode",
+    "id": "rolikakiu.multimode",
     "name": "antika geode mod",
     "version": "1.6.0",
-    "developer": "antika",
+    "developer": "rolikakiu",
     "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
     "repository": "https://github.com/rolikakiu/GeometryExtra",
-    "tags": ["Utility", "Gameplay", "Platformer"],
+    "tags": ["gameplay", "enhancement"],
     "dependencies": {
         "eclipse.eclipse-menu": {
             "version": ">=v1.9.4",
