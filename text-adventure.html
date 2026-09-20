@@ -909,7 +909,7 @@ function showRoom() {
   }
 }
 
-setTimeout(() => {
+(function boot() {
   refreshBadge();
   mpConnect();
   loadBoard();
@@ -919,7 +919,7 @@ setTimeout(() => {
     $('continue-btn').style.opacity = hasAny ? '1' : '0.35';
     $('continue-btn').disabled = !hasAny;
   } catch (e) {}
-}, 100);
+})();
 
 function room1() {
   addEntry('<div class="room-title">Room 1: The Entrance</div>You descend the cold stone steps into the dungeon. The air is damp and smells of moss. A faint torchlight flickers ahead, and you hear water dripping somewhere in the dark. Two passages lie before you.', 'narrator');

@@ -22,3 +22,6 @@ Thumbs.db
 # Android platform tools (adb/fastboot) - not part of the app
 platform-tools/
 platform-tools-latest-windows.zip
+
+# Geode mod build output
+my-geode-mod/build/

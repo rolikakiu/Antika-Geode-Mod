@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const { promisify } = require('util');
 const { DatabaseSync } = require('node:sqlite');
 const { exec } = require('child_process');
 const nodemailer = require('nodemailer');
@@ -9,6 +10,7 @@ const OpenAI = require('openai');
 const WebSocket = require('ws');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
+const scrypt = promisify(crypto.scrypt);
 
 const db = new DatabaseSync(process.env.DB_PATH || './gd.db');
 db.exec(`
@@ -99,17 +101,30 @@ CREATE TABLE IF NOT EXISTS bans (
   banned_by TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS levels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  username TEXT NOT NULL,
+  name TEXT NOT NULL,
+  speed INTEGER NOT NULL DEFAULT 320,
+  objects TEXT NOT NULL DEFAULT '[]',
+  stars INTEGER DEFAULT 0,
+  badge TEXT DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `);
 
 
 /* ---------------- Password hashing ---------------- */
-function hashPass(p) {
+async function hashPass(p) {
   const salt = crypto.randomBytes(16).toString('hex');
-  return salt + ':' + crypto.scryptSync(p, salt, 64).toString('hex');
+  const hash = await scrypt(p, salt, 64);
+  return salt + ':' + hash.toString('hex');
 }
-function checkPass(p, stored) {
+async function checkPass(p, stored) {
   const [salt, hash] = String(stored).split(':');
-  const calc = crypto.scryptSync(p, salt, 64);
+  const calc = await scrypt(p, salt, 64);
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), calc);
 }
 function newCode() {
@@ -244,7 +259,7 @@ app.post('/api/register', async (req, res) => {
 
   const code = newCode();
   const info = db.prepare('INSERT INTO users (username, email, pass_hash, role, verified, code, code_created, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)')
-    .run(username, email, hashPass(password), 'player', code, Date.now(), Date.now());
+    .run(username, email, await hashPass(password), 'player', code, Date.now(), Date.now());
 
   try {
     await sendCode(username, email, code);
@@ -289,11 +304,11 @@ app.post('/api/verify', (req, res) => {
 });
 
 /* --- Login --- */
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  if (!user || !checkPass(password, user.pass_hash)) return res.status(401).json({ error: 'Wrong username or password' });
+  if (!user || !(await checkPass(password, user.pass_hash))) return res.status(401).json({ error: 'Wrong username or password' });
   if (!user.verified) return res.status(403).json({ error: 'Account not verified — check your email' });
 
   const token = newToken();
@@ -321,7 +336,7 @@ app.post('/api/forgot-password', async (req, res) => {
 });
 
 /* --- Reset password --- */
-app.post('/api/reset-password', (req, res) => {
+app.post('/api/reset-password', async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const code = parseCode(req.body?.code);
   const newPass = String(req.body?.newPassword || '');
@@ -331,7 +346,7 @@ app.post('/api/reset-password', (req, res) => {
   const expired = Date.now() - (user.reset_created || 0) > 15 * 60 * 1000;
   if (!user.reset_code || code !== user.reset_code || expired) return res.status(400).json({ error: 'Wrong or expired code' });
   if (newPass.length < 4) return res.status(400).json({ error: 'Password too short' });
-  db.prepare('UPDATE users SET pass_hash = ?, reset_code = NULL, reset_created = NULL WHERE id = ?').run(hashPass(newPass), user.id);
+  db.prepare('UPDATE users SET pass_hash = ?, reset_code = NULL, reset_created = NULL WHERE id = ?').run(await hashPass(newPass), user.id);
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
   res.json({ ok: true });
 });
@@ -410,13 +425,13 @@ app.post('/api/profile/email/confirm', auth, (req, res) => {
   db.prepare('UPDATE users SET email = ?, pending_email = NULL, pending_code = NULL, pending_created = NULL WHERE id = ?').run(u.pending_email, req.user.id);
   res.json({ ok: true, profile: myProfile(req) });
 });
-app.post('/api/profile/password', auth, (req, res) => {
+app.post('/api/profile/password', auth, async (req, res) => {
   const current = String(req.body?.currentPassword || '');
   const next = String(req.body?.newPassword || '');
   if (next.length < 4) return res.status(400).json({ error: 'Password too short' });
   const u = db.prepare('SELECT pass_hash FROM users WHERE id = ?').get(req.user.id);
-  if (!checkPass(current, u.pass_hash)) return res.status(401).json({ error: 'Current password is wrong' });
-  db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(hashPass(next), req.user.id);
+  if (!(await checkPass(current, u.pass_hash))) return res.status(401).json({ error: 'Current password is wrong' });
+  db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(await hashPass(next), req.user.id);
   db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(req.user.id, req.token);
   res.json({ ok: true });
 });
@@ -604,6 +619,51 @@ app.delete('/api/accounts/:id', (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Bad id' });
   db.prepare('DELETE FROM saved_accounts WHERE id = ? AND device = ?').run(id, device);
   res.json({ accounts: accountsOf(device) });
+});
+
+/* --- Online levels --- */
+function levelJSON(r) {
+  return { id: r.id, username: r.username, name: r.name, speed: r.speed, objects: JSON.parse(r.objects), stars: r.stars, badge: r.badge, createdAt: r.created_at, updatedAt: r.updated_at };
+}
+app.post('/api/levels', auth, (req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 40);
+  const speed = Math.max(100, Math.min(600, Math.round(Number(req.body?.speed) || 320)));
+  const objects = req.body?.objects;
+  if (!name) return res.status(400).json({ error: 'Level name required' });
+  if (!Array.isArray(objects) || objects.length < 1 || objects.length > 5000) return res.status(400).json({ error: 'Need 1–5000 objects' });
+  const info = db.prepare('INSERT INTO levels (user_id, username, name, speed, objects, stars, badge, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(req.user.id, req.user.name.slice(0, 16), name, speed, JSON.stringify(objects), 0, '', Date.now(), Date.now());
+  res.json({ ok: true, id: Number(info.lastInsertRowid) });
+});
+app.get('/api/levels', (req, res) => {
+  const rows = db.prepare('SELECT * FROM levels ORDER BY stars DESC, updated_at DESC LIMIT 50').all();
+  res.json({ levels: rows.map(levelJSON) });
+});
+app.get('/api/levels/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = db.prepare('SELECT * FROM levels WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Level not found' });
+  res.json({ level: levelJSON(row) });
+});
+app.delete('/api/levels/:id', auth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = db.prepare('SELECT id, user_id FROM levels WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && req.user.role !== 'mod' && row.user_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
+  db.prepare('DELETE FROM levels WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+app.post('/api/levels/:id/rate', auth, (req, res) => {
+  if (req.user.role !== 'mod' && req.user.role !== 'admin') return res.status(403).json({ error: 'Moderators only' });
+  const id = parseInt(req.params.id, 10);
+  const row = db.prepare('SELECT id FROM levels WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Level not found' });
+  const stars = Math.max(0, Math.min(10, Math.round(Number(req.body?.stars) || 0)));
+  const badge = String(req.body?.badge || '').trim();
+  const validBadges = ['', 'featured', 'epic', 'legendary', 'mythic'];
+  if (!validBadges.includes(badge)) return res.status(400).json({ error: 'Invalid badge' });
+  db.prepare('UPDATE levels SET stars = ?, badge = ?, updated_at = ? WHERE id = ?').run(stars, badge, Date.now(), id);
+  res.json({ ok: true });
 });
 
 /* --- Promote (role management) --- */
@@ -811,14 +871,14 @@ wss.on('connection', (ws, req) => {
 
 /* ---------------- Optional admin seed ---------------- */
 if (process.env.ADMIN_PASSWORD) {
-  try {
+  (async () => { try {
     const exists = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
     if (!exists) {
       db.prepare("INSERT INTO users (username, email, pass_hash, role, verified, created_at) VALUES ('admin', 'admin@localhost', ?, 'admin', 1, ?)")
-        .run(hashPass(process.env.ADMIN_PASSWORD), Date.now());
+        .run(await hashPass(process.env.ADMIN_PASSWORD), Date.now());
       console.log('Seeded admin account (username: admin).');
     }
   } catch (e) {
     console.error('Admin seed failed:', e.message);
-  }
+  } })();
 }

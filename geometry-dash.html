@@ -53,6 +53,8 @@
   .gbtn.mini { width: auto; padding: 4px 10px; font-size: 12px; font-weight: 600; }
   .gbtn.mini.danger { border-color: #ff5c5c; color: #ff8d8d; background: rgba(255,92,92,0.08); }
   .gbtn.mini.danger:hover { border-color: #ff5c5c; background: rgba(255,92,92,0.2); transform: none; }
+  .gbtn.danger { border-color: #ff5c5c; color: #ff8d8d; background: rgba(255,92,92,0.08); }
+  .gbtn.danger:hover { border-color: #ff5c5c; background: rgba(255,92,92,0.2); }
 
   .acc-row {
     display: flex; align-items: center; justify-content: space-between;
@@ -266,6 +268,7 @@
 <div id="hud" class="hidden">
   <div id="hudLevel">Level</div>
   <div class="hint" id="bestText"></div>
+  <div class="hint" id="attemptText"></div>
   <div class="hint" id="mpText">&nbsp;</div>
   <div class="hint">Space / Up / W / Click = Jump</div>
   <div class="hint">R = Restart &nbsp; P = Pause &nbsp; Esc = Menu &nbsp; M = Mute &nbsp; F2 = Mods</div>
@@ -275,6 +278,7 @@
 <div id="menu" class="overlay active">
   <h1>GEOMETRY EXTRA</h1>
   <p class="tag">A GEOMETRY DASH STYLE GAME</p>
+  <p class="tag" id="menuStats">Keys 0 &middot; Attempts 0</p>
   <div class="btn-row">
     <button class="gbtn blue" id="btnPlay">PLAY</button>
     <button class="gbtn" id="btnCreate">CREATE</button>
@@ -388,6 +392,16 @@
     <div class="set-row">Screen Shake<input type="checkbox" id="sShake"></div>
     <div class="set-row">Particles<input type="checkbox" id="sParticles"></div>
     <div class="set-row">Auto-Jump (hold)<input type="checkbox" id="sAutoJump"></div>
+    <div class="set-row">Default Gamemode
+      <select id="sDefaultGm">
+        <option value="cube">Cube</option>
+        <option value="ship">Ship</option>
+        <option value="wave">Wave</option>
+        <option value="ufo">UFO</option>
+        <option value="robot">Robot</option>
+        <option value="spider">Spider</option>
+      </select>
+    </div>
     <button class="switch hidden" id="secretBtn" title="???">???</button>
     <button class="gbtn small" style="width:100%" id="btnReset">Reset All Save Data</button>
     <button class="switch" id="btnSettingsBack">Back</button>
@@ -415,8 +429,28 @@
   </div>
 </div>
 
+<div id="createOverlay" class="overlay hidden">
+  <div class="panel">
+    <h3 style="color:#00e5ff">CREATE</h3>
+    <button class="gbtn blue" style="width:100%;margin:6px 0" id="btnOnlineLevels">ONLINE LEVELS</button>
+    <button class="gbtn" style="width:100%;margin:6px 0" id="btnEditorOpen">CREATE OWN LEVEL</button>
+    <button class="switch" id="btnCreateBack">Back</button>
+    <p class="msg" id="createMsg"></p>
+  </div>
+</div>
+
+<div id="onlineOverlay" class="overlay hidden">
+  <div class="panel">
+    <h3 style="color:#00e5ff">ONLINE LEVELS</h3>
+    <div id="onlineLevelList"></div>
+    <button class="switch" id="btnOnlineBack">Back</button>
+    <p class="msg" id="onlineMsg"></p>
+  </div>
+</div>
+
 <div id="winScreen" class="overlay hidden">
   <h2>LEVEL COMPLETE!</h2>
+  <p id="winKeyLine" class="hidden">KEY COLLECTED +1</p>
   <p>nice jump. press any key or wait to return</p>
 </div>
 
@@ -476,12 +510,19 @@
   <button class="toolbtn" data-brush="block" title="Block">#</button>
   <button class="toolbtn" data-brush="platform" title="Platform">=</button>
   <button class="toolbtn" data-brush="pad" title="Jump Pad">+</button>
+  <button class="toolbtn" data-brush="dashorb" title="Dash Orb" style="color:#00ffa3">o</button>
   <button class="toolbtn" data-brush="finish" title="Finish">F</button>
+  <button class="toolbtn" data-brush="portal_cube" title="Portal: Cube" style="color:#00e5ff">c</button>
+  <button class="toolbtn" data-brush="portal_ship" title="Portal: Ship" style="color:#ff6ec7">s</button>
+  <button class="toolbtn" data-brush="portal_wave" title="Portal: Wave" style="color:#00ffa3">w</button>
+  <button class="toolbtn" data-brush="portal_ufo" title="Portal: UFO" style="color:#ffd000">u</button>
+  <button class="toolbtn" data-brush="portal_robot" title="Portal: Robot" style="color:#a78bfa">r</button>
+  <button class="toolbtn" data-brush="portal_spider" title="Portal: Spider" style="color:#ff5c5c">k</button>
   <button class="toolbtn" data-brush="eraser" title="Eraser">X</button>
   <span class="hint">&nbsp;&lt; &gt; scroll &nbsp; &nbsp; click / drag = place</span>
   <button class="actbtn" id="btnTest">Test</button>
   <button class="actbtn" id="btnSave">Save</button>
-  <button class="actbtn" id="btnRate">Rate</button>
+  <button class="actbtn" id="btnPublish">Publish</button>
   <button class="actbtn danger" id="btnClear">Clear</button>
   <button class="actbtn" id="btnBackEditor">Menu</button>
 </div>
@@ -541,10 +582,20 @@ const BADGES = {
 };
 let session = store.get('gd_session', null);
 if (!store.get('gd_device')) store.set('gd_device', 'dev-' + Math.random().toString(36).slice(2, 12));
-let customRating = store.get('gd_rate', { badge: '', stars: 0 });
 let bests = store.get('gd_bests', {}); // key -> 0..100
+let stats = store.get('gd_stats', { keys: 0, total: 0, perLevel: {}, gotKey: {} });
+function saveStats() { store.set('gd_stats', stats); }
+let countAttempt = true;
+function updateStatsUI() {
+  const k = run && run.level ? (run.level.key || 'custom') : null;
+  const a = document.getElementById('attemptText');
+  const n = stats.perLevel[k] || 0;
+  if (a) a.textContent = k && n ? 'Attempt ' + n : '';
+  const m = document.getElementById('menuStats');
+  if (m) m.textContent = 'Keys ' + stats.keys + ' \u00b7 Attempts ' + stats.total;
+}
 let fpStats = store.get('gd_fp', { count: 0 });
-let settings = store.get('gd_settings', { sfxVol: 1, musicVol: 0.35, musicOn: true, shake: true, particles: true, autoJump: true });
+let settings = store.get('gd_settings', { sfxVol: 1, musicVol: 0.35, musicOn: true, shake: true, particles: true, autoJump: true, defaultGm: 'cube' });
 let mods = store.get('gd_mods', { noclip: false, infJump: false, gravity: 1, speed: 1, jump: 1, reverse: false, skipEnd: false, followCam: false, practice: false, showHitboxes: false });
 let parts = [];
 let shakeT = 0;
@@ -558,6 +609,7 @@ function currentProg() {
 function updateBestHUD() {
   const el = document.getElementById('bestText');
   if (el && run && run.level) el.textContent = 'Best: ' + (bests[run.level.key] || 0) + '%';
+  updateStatsUI();
 }
 
 function spawnBurst(px, py, n, colors) {
@@ -733,10 +785,65 @@ const LEVELS = [
     o(28, 1, 'platform'), o(29, 1, 'platform'),
     o(28, 0, 'spike'), o(30, 0, 'spike'), o(32, 0, 'spike'),
     o(34, 0, 'finish')
+  ]},
+  { name: 'Portalocked', speed: 300, objects: [
+    o(8, 0, 'spike'),
+    o(10, 0, 'portal_ship'),
+    o(13, 0, 'spike'), o(14, 0, 'spike'), o(15, 0, 'spike'),
+    o(18, 0, 'spike'), o(19, 0, 'spike'), o(20, 0, 'spike'),
+    o(22, 0, 'portal_cube'),
+    o(24, 0, 'spike'), o(24, 1, 'spike'),
+    o(27, 0, 'pad'),
+    o(30, 0, 'portal_wave'),
+    o(32, 9, 'spike'), o(33, 0, 'spike'), o(34, 9, 'spike'), o(35, 0, 'spike'),
+    o(36, 9, 'spike'), o(37, 0, 'spike'), o(38, 9, 'spike'), o(39, 0, 'spike'),
+    o(40, 9, 'spike'), o(41, 0, 'spike'), o(42, 9, 'spike'), o(43, 0, 'spike'),
+    o(44, 0, 'portal_cube'),
+    o(47, 0, 'block'), o(48, 1, 'block'),
+    o(49, 0, 'spike'),
+    o(52, 0, 'portal_ufo'),
+    o(55, 0, 'spike'), o(57, 0, 'spike'), o(59, 0, 'spike'),
+    o(61, 0, 'spike'), o(63, 0, 'spike'), o(65, 0, 'spike'),
+    o(66, 0, 'portal_cube'),
+    o(69, 0, 'pad'),
+    o(72, 0, 'block'), o(72, 1, 'block'), o(72, 2, 'block'),
+    o(74, 0, 'spike'),
+    o(76, 0, 'portal_robot'),
+    o(79, 0, 'spike'),
+    o(81, 0, 'block'), o(81, 1, 'block'),
+    o(83, 0, 'spike'), o(84, 0, 'spike'),
+    o(86, 0, 'portal_spider'),
+    o(88, 0, 'spike'), o(90, 0, 'spike'), o(92, 0, 'spike'),
+    o(89, 9, 'spike'), o(91, 9, 'spike'),
+    o(94, 0, 'portal_cube'),
+    o(96, 0, 'spike'),
+    o(99, 0, 'finish')
+  ]},
+  { name: 'Dash Orb', speed: 300, objects: [
+    o(4, 0, 'spike'),
+    o(8, 1, 'dashorb'),
+    o(11, 0, 'spike'), o(12, 0, 'spike'), o(13, 0, 'spike'),
+    o(14, 0, 'spike'), o(15, 0, 'spike'), o(16, 0, 'spike'),
+    o(17, 0, 'spike'), o(18, 0, 'spike'), o(19, 0, 'spike'),
+    o(23, 0, 'block'),
+    o(26, 0, 'spike'),
+    o(29, 0, 'finish')
+  ]},
+  { name: 'Default Mode', speed: 320, defaultGm: 'ship', objects: [
+    o(5, 0, 'spike'), o(6, 0, 'spike'), o(7, 0, 'spike'),
+    o(11, 3, 'block'), o(12, 3, 'block'),
+    o(15, 0, 'spike'), o(16, 0, 'spike'), o(17, 0, 'spike'),
+    o(21, 3, 'block'), o(22, 3, 'block'),
+    o(25, 0, 'spike'), o(26, 0, 'spike'), o(27, 0, 'spike'),
+    o(31, 0, 'portal_cube'),
+    o(34, 0, 'pad'),
+    o(37, 0, 'block'), o(37, 1, 'block'),
+    o(40, 0, 'spike'),
+    o(43, 0, 'finish')
   ]}
 ];
 
-const BRUSHES = ['spike', 'block', 'platform', 'pad', 'finish', 'eraser'];
+const BRUSHES = ['spike', 'block', 'platform', 'pad', 'dashorb', 'finish', 'portal_cube', 'portal_ship', 'portal_wave', 'portal_ufo', 'portal_robot', 'portal_spider', 'eraser'];
 
 /* ---------------- Geometry helpers ---------------- */
 function rowY(g) { return GROUND_Y - CELL - g * CELL; }
@@ -748,7 +855,11 @@ function objRect(obj) {
     case 'spike': return [x + 18, y + 12, 12, 22];
     case 'platform': return [x, y, CELL, 16];
     case 'pad': return [x + 4, y + 16, CELL - 8, CELL - 16];
+    case 'dashorb': return [x + 12, y + 10, CELL - 24, CELL - 6];
     case 'finish': return [x + 10, -1000, CELL - 20, GROUND_Y + 1000];
+    case 'portal_cube': case 'portal_ship': case 'portal_wave':
+    case 'portal_ufo': case 'portal_robot': case 'portal_spider':
+      return [x + 10, -1000, CELL - 20, GROUND_Y + 1000];
     default: return [x, y, CELL, CELL];
   }
 }
@@ -766,8 +877,14 @@ let paused = false;
 
 function startRun(level, diff) {
   const d = diff || DIFFS.normal;
-  const player = { x: CELL * 1.5, y: GROUND_Y - CELL, vy: 0, rot: 0, grounded: true, airTime: 0 };
-  run = { level, player, camX: 0, trail: [], padCd: 0, obj: level.objects, diff: d, jv: JUMP_V * d.jump, fpMap: new Map(), elapsed: 0, recSamples: [], sampleAcc: 0, lastMPSend: 0 };
+  const k = level && (level.key || level.name || 'custom');
+  if (countAttempt && k) {
+    stats.perLevel[k] = (stats.perLevel[k] || 0) + 1;
+    stats.total++;
+    saveStats();
+  }
+  const player = { x: CELL * 1.5, y: GROUND_Y - CELL, vy: 0, rot: 0, grounded: true, airTime: 0, gm: level.defaultGm || settings.defaultGm || 'cube', gdir: 1 };
+  run = { level, player, camX: 0, trail: [], padCd: 0, obj: level.objects, diff: d, jv: JUMP_V * d.jump, fpMap: new Map(), elapsed: 0, recSamples: [], sampleAcc: 0, lastMPSend: 0, dashArm: 0, orbHold: false, orbY: 0 };
   ghosts.forEach(g => { g.idx = 0; g.pt = 0; });
   runState = 'playing';
   deathTimer = 0; winTimer = 0; paused = false;
@@ -906,10 +1023,27 @@ let mouse = { x: 0, y: 0, down: false };
 function pressJump() {
   jumpPressed = true;
   jumpHeld = true;
-  if (!paused && runState === 'playing' && run && (run.player.grounded || mods.infJump)) {
-    run.player.vy = -((run.jv || JUMP_V) * mods.jump);
-    run.player.grounded = false;
-    sfx.jump();
+  if (!paused && runState === 'playing' && run) {
+    const p = run.player, gm = p.gm || 'cube';
+    if (gm === 'cube' && (p.grounded || mods.infJump)) {
+      p.vy = -((run.jv || JUMP_V) * mods.jump);
+      p.grounded = false;
+      sfx.jump();
+    } else if (gm === 'robot') {
+      if (p.grounded || mods.infJump) {
+        p.vy = -((run.jv || JUMP_V) * 0.65 * mods.jump);
+        p.grounded = false;
+        sfx.jump();
+      }
+    } else if (gm === 'ufo') {
+      p.vy = -900 * mods.jump;
+      p.grounded = false;
+      sfx.jump();
+    } else if (gm === 'spider') {
+      p.gdir = -(p.gdir || 1);
+      sfx.jump();
+    }
+    run.dashArm = performance.now();
   }
   audio();
 }
@@ -987,6 +1121,7 @@ function toMenu() {
   stopMp();
   openMenu();
   closeWin();
+  updateStatsUI();
   document.getElementById('pause').classList.add('hidden');
 }
 function openMenu() {
@@ -998,6 +1133,8 @@ function closeMenu() {
   document.getElementById('menu').classList.remove('active');
 }
 function closeWin() {
+  const kl = document.getElementById('winKeyLine');
+  if (kl) kl.classList.add('hidden');
   document.getElementById('winScreen').classList.add('hidden');
   document.getElementById('winScreen').classList.remove('active');
 }
@@ -1050,15 +1187,7 @@ function buildLevelList() {
   });
   const bc = document.createElement('button');
   bc.className = 'gbtn small blue';
-  const rateBadge = BADGES[customRating.badge || ''];
-  const starsTxt = customRating.stars ? ' \u2605' + customRating.stars : '';
   bc.textContent = 'My Custom Level';
-  if (rateBadge && customRating.badge) {
-    const sp = document.createElement('span');
-    sp.style.cssText = 'margin-left:8px;font-size:12px;color:' + rateBadge.color + ';';
-    sp.textContent = '[' + rateBadge.name + ']' + starsTxt;
-    bc.appendChild(sp);
-  }
   bc.onclick = () => {
     sfx.click(); closeLevelList();
     const lv = { name: 'My Level', speed: 320, objects: customLevel, key: 'custom' };
@@ -1088,9 +1217,132 @@ document.getElementById('btnPlay').onclick = () => {
   list.classList.toggle('hidden', !show);
 };
 document.getElementById('btnCreate').onclick = () => {
-  sfx.click(); closeMenu(); screen = 'editor';
+  sfx.click();
+  document.getElementById('createOverlay').classList.remove('hidden');
+  document.getElementById('createOverlay').classList.add('active');
+};
+function closeCreateOverlay() {
+  document.getElementById('createOverlay').classList.add('hidden');
+  document.getElementById('createOverlay').classList.remove('active');
+}
+document.getElementById('btnCreateBack').onclick = () => { sfx.click(); closeCreateOverlay(); };
+document.getElementById('btnOnlineLevels').onclick = () => { sfx.click(); closeCreateOverlay(); openOnlineLevels(); };
+document.getElementById('btnEditorOpen').onclick = () => {
+  sfx.click(); closeCreateOverlay(); closeMenu(); screen = 'editor';
   editorInit();
 };
+document.getElementById('btnOnlineBack').onclick = () => { sfx.click(); closeOnlineLevels(); };
+
+/* ---- Online levels ---- */
+let rateLevelId = null;
+let onlineLevels = [];
+
+async function openOnlineLevels() {
+  closeMenu();
+  screen = 'menu';
+  document.getElementById('onlineMsg').textContent = '';
+  document.getElementById('onlineOverlay').classList.remove('hidden');
+  document.getElementById('onlineOverlay').classList.add('active');
+  const r = await api('/api/levels');
+  if (!r.ok) {
+    document.getElementById('onlineMsg').className = 'msg';
+    document.getElementById('onlineMsg').textContent = r.data.error || 'Cannot reach server';
+    document.getElementById('onlineLevelList').innerHTML = '';
+    return;
+  }
+  onlineLevels = r.data.levels || [];
+  renderOnlineLevels();
+}
+
+function closeOnlineLevels() {
+  document.getElementById('onlineOverlay').classList.add('hidden');
+  document.getElementById('onlineOverlay').classList.remove('active');
+  openMenu();
+}
+
+function renderOnlineLevels() {
+  const list = document.getElementById('onlineLevelList');
+  list.innerHTML = '';
+  if (!onlineLevels.length) {
+    const e = document.createElement('div');
+    e.style.cssText = 'color:#889;padding:20px;text-align:center;';
+    e.textContent = 'No online levels yet — publish yours!';
+    list.appendChild(e);
+    return;
+  }
+  const isStaff = session && (session.role === 'mod' || session.role === 'admin');
+  onlineLevels.forEach(lv => {
+    const row = document.createElement('div');
+    row.style.cssText = 'border:1px solid #303051;border-radius:8px;padding:8px;margin:6px 0;';
+    const line = document.createElement('div');
+    line.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;';
+    const name = document.createElement('b');
+    const badge = BADGES[lv.badge || ''];
+    const starsTxt = lv.stars ? ' \u2605' + lv.stars : '';
+    name.textContent = lv.name;
+    if (lv.badge) {
+      const sp = document.createElement('span');
+      sp.style.cssText = 'margin-left:6px;font-size:11px;color:' + badge.color + ';';
+      sp.textContent = '[' + badge.name + ']' + starsTxt;
+      name.appendChild(sp);
+    }
+    line.appendChild(name);
+    const by = document.createElement('span');
+    by.style.cssText = 'color:#889;font-size:12px;';
+    by.textContent = 'by ' + lv.username;
+    line.appendChild(by);
+    row.appendChild(line);
+    const acts = document.createElement('div');
+    acts.style.cssText = 'display:flex;gap:6px;margin-top:6px;';
+    const play = document.createElement('button');
+    play.className = 'gbtn small';
+    play.textContent = 'Play';
+    play.onclick = () => { sfx.click(); closeOnlineLevels(); playOnlineLevel(lv); };
+    acts.appendChild(play);
+    if (isStaff) {
+      const rate = document.createElement('button');
+      rate.className = 'gbtn small blue';
+      rate.textContent = 'Rate';
+      rate.onclick = () => { sfx.click(); openRatePanelFor(lv); };
+      acts.appendChild(rate);
+    }
+    const isMine = session && lv.username === session.name;
+    if (isMine || isStaff) {
+      const del = document.createElement('button');
+      del.className = 'gbtn small danger';
+      del.textContent = 'Delete';
+      del.onclick = async () => {
+        sfx.click();
+        const r = await api('/api/levels/' + lv.id, 'DELETE', null, session.token);
+        if (r.ok) {
+          onlineLevels = onlineLevels.filter(x => x.id !== lv.id);
+          renderOnlineLevels();
+        } else {
+          document.getElementById('onlineMsg').className = 'msg';
+          document.getElementById('onlineMsg').textContent = r.data.error || 'Delete failed';
+        }
+      };
+      acts.appendChild(del);
+    }
+    row.appendChild(acts);
+    list.appendChild(row);
+  });
+}
+
+function playOnlineLevel(lv) {
+  const runLv = { name: lv.name, speed: lv.speed, objects: lv.objects, key: 'ol' + lv.id };
+  closeMenu();
+  hud(true);
+  screen = 'play';
+  const dl = DIFFS[difficulty].label;
+  document.getElementById('hudLevel').textContent = lv.name + ' — ' + dl + (lv.speed >= 380 ? ' &#9889;' : '');
+  startRun(runLv, DIFFS[difficulty]);
+  updateBestHUD();
+  updatePracticeHint();
+  loadGhosts(runLv);
+  mpConnect();
+}
+
 document.getElementById('btnIcons').onclick = () => {
   sfx.click(); closeMenu(); screen = 'icons';
   iconPanelRefresh();
@@ -1482,8 +1734,8 @@ document.getElementById('btnResendCode').onclick = async () => {
 };
 
 /* ---- Rate panel ---- */
-let rateBadgeState = customRating.badge || '';
-let rateStarsState = customRating.stars || 0;
+let rateBadgeState = '';
+let rateStarsState = 0;
 
 function buildRateStars() {
   const wrap = document.getElementById('rateStars');
@@ -1511,12 +1763,13 @@ function buildRateBadges() {
   });
 }
 
-function openRatePanel() {
+function openRatePanelFor(lv) {
   if (!session) { flashToast('You must be logged in to rate'); return; }
   if (session.role !== 'mod' && session.role !== 'admin') { flashToast('Only moderators can rate'); return; }
-  rateBadgeState = customRating.badge || '';
-  rateStarsState = customRating.stars || 0;
-  document.getElementById('rateTitle').textContent = 'RATE — My Level';
+  rateLevelId = lv.id;
+  rateBadgeState = lv.badge || '';
+  rateStarsState = lv.stars || 0;
+  document.getElementById('rateTitle').textContent = 'RATE — ' + lv.name;
   document.getElementById('rateMsg').textContent = '';
   buildRateStars(); buildRateBadges();
   document.getElementById('rateOverlay').classList.remove('hidden');
@@ -1525,13 +1778,28 @@ function openRatePanel() {
 function closeRatePanel() { document.getElementById('rateOverlay').classList.add('hidden'); document.getElementById('rateOverlay').classList.remove('active'); }
 
 document.getElementById('btnRateCancel').onclick = () => { sfx.click(); closeRatePanel(); };
-document.getElementById('btnRateSave').onclick = () => {
-  customRating = { badge: rateBadgeState, stars: rateStarsState };
-  store.set('gd_rate', customRating);
+document.getElementById('btnRateSave').onclick = async () => {
+  if (!rateLevelId) { closeRatePanel(); return; }
   sfx.click();
-  document.getElementById('rateMsg').className = 'msg ok';
-  document.getElementById('rateMsg').textContent = 'Rated ' + (BADGES[rateBadgeState]?.name || 'Unrated') + (rateStarsState ? ' \u2605' + rateStarsState : '');
-  setTimeout(closeRatePanel, 600);
+  const r = await api('/api/levels/' + rateLevelId + '/rate', 'POST', {
+    stars: rateStarsState,
+    badge: rateBadgeState
+  }, session.token);
+  document.getElementById('rateMsg').innerHTML = '';
+  if (r.ok) {
+    document.getElementById('rateMsg').className = 'msg ok';
+    document.getElementById('rateMsg').textContent = 'Rated ' + (BADGES[rateBadgeState]?.name || 'Unrated') + (rateStarsState ? ' \u2605' + rateStarsState : '');
+    const idx = onlineLevels.findIndex(x => x.id === rateLevelId);
+    if (idx >= 0) {
+      onlineLevels[idx].stars = rateStarsState;
+      onlineLevels[idx].badge = rateBadgeState;
+      renderOnlineLevels();
+    }
+    setTimeout(closeRatePanel, 600);
+  } else {
+    document.getElementById('rateMsg').className = 'msg';
+    document.getElementById('rateMsg').textContent = r.data.error || 'Rate failed';
+  }
 };
 
 /* ---- Settings panel ---- */
@@ -1544,6 +1812,7 @@ document.getElementById('btnSettings').onclick = () => {
   document.getElementById('sShake').checked = settings.shake;
   document.getElementById('sParticles').checked = settings.particles;
   document.getElementById('sAutoJump').checked = settings.autoJump;
+  document.getElementById('sDefaultGm').value = settings.defaultGm || 'cube';
   document.getElementById('settingsMsg').textContent = '';
   const secretBtn = document.getElementById('secretBtn');
   if (Math.random() < 0.25) {
@@ -1562,7 +1831,8 @@ function saveSettings() {
     sfxVol: parseInt(document.getElementById('sSfx').value, 10) / 100,
     shake: document.getElementById('sShake').checked,
     particles: document.getElementById('sParticles').checked,
-    autoJump: document.getElementById('sAutoJump').checked
+    autoJump: document.getElementById('sAutoJump').checked,
+    defaultGm: document.getElementById('sDefaultGm').value || 'cube'
   };
   store.set('gd_settings', settings);
 }
@@ -1572,6 +1842,7 @@ document.getElementById('sSfx').oninput = saveSettings;
 document.getElementById('sShake').onchange = () => { saveSettings(); sfx.click(); };
 document.getElementById('sParticles').onchange = () => { saveSettings(); sfx.click(); };
 document.getElementById('sAutoJump').onchange = () => { saveSettings(); sfx.click(); };
+document.getElementById('sDefaultGm').onchange = () => { saveSettings(); sfx.click(); };
 document.getElementById('btnSettingsBack').onclick = () => {
   sfx.click();
   document.getElementById('settingsOverlay').classList.add('hidden');
@@ -1684,7 +1955,20 @@ document.getElementById('btnClear').onclick = () => {
   editorObjects = [];
   flashToast('Cleared');
 };
-document.getElementById('btnRate').onclick = () => { sfx.click(); openRatePanel(); };
+document.getElementById('btnPublish').onclick = async () => {
+  sfx.click();
+  if (!session || !session.token) { flashToast('You must be logged in to publish'); return; }
+  if (!editorObjects.length) { flashToast('Level is empty'); return; }
+  document.getElementById('btnPublish').disabled = true;
+  const r = await api('/api/levels', 'POST', {
+    name: 'My Level',
+    speed: 320,
+    objects: editorObjects
+  }, session.token);
+  document.getElementById('btnPublish').disabled = false;
+  if (r.ok) { flashToast('Published to online levels!'); }
+  else { flashToast(r.data.error || 'Publish failed'); }
+};
 document.getElementById('btnBackEditor').onclick = () => { sfx.click(); editorExit(); };
 
 function flashToast(msg) {
@@ -1701,7 +1985,9 @@ function editorTest() {
   hud(true);
   screen = 'play';
   document.getElementById('hudLevel').textContent = 'Testing — My Level (' + DIFFS[difficulty].label + ')';
+  countAttempt = false;
   startRun({ name: 'My Level', speed: 320, objects: JSON.parse(JSON.stringify(editorObjects)), key: 'custom' }, DIFFS[difficulty]);
+  countAttempt = true;
   updateBestHUD();
   updatePracticeHint();
 }
@@ -1779,22 +2065,49 @@ function updateRun(dt) {
     return;
   }
 
-  // horizontal (camera-driven forward)
+  // horizontal (camera-driven forward / dash-orb glide at player speed)
+  const orbHeld = run.orbHold && jumpHeld;
+  if (run.orbHold && !jumpHeld) run.orbHold = false;
   p.x += speed * dt;
   p.airTime += dt;
 
-  // gravity with jump-hold
+  // gravity with per-gamemode behavior (frozen while holding a dash orb)
+  const gm = run.player.gm || 'cube';
   let g = G * mods.gravity;
-  if (jumpHeld && p.vy < 0) g *= 0.5;
-  p.vy = Math.min(p.vy + g * dt, MAX_FALL);
+  if (jumpHeld && p.vy < 0 && gm === 'cube') g *= 0.5;
   const prevBottom = p.y + CELL;
 
-  p.y += p.vy * dt;
+  if (orbHeld) {
+    p.y = run.orbY;
+    p.vy = 0;
+    p.grounded = false;
+    p.airTime = 0;
+  } else if (gm === 'ship' || gm === 'wave') {
+    const a = (gm === 'wave' ? 2100 : 1350) * mods.gravity;
+    const acc = (jumpHeld ? -a : a) * mods.jump;
+    p.vy = Math.max(-MAX_FALL, Math.min(MAX_FALL, p.vy + acc * dt));
+  } else if (gm === 'ufo') {
+    if (jumpHeld) p.vy = Math.max(p.vy - 1500 * mods.gravity * dt, -1500);
+    else p.vy = Math.min(p.vy + G * 0.9 * mods.gravity * dt, MAX_FALL);
+  } else if (gm === 'spider') {
+    const dir = p.gdir === undefined ? 1 : p.gdir;
+    p.vy = Math.min(p.vy + g * dir * dt, MAX_FALL);
+  } else if (gm === 'robot') {
+    p.vy = Math.min(p.vy + g * 1.2 * dt, MAX_FALL);
+  } else {
+    p.vy = Math.min(p.vy + g * dt, MAX_FALL);
+  }
 
-  // ground
-  p.grounded = false;
-  if (p.y >= GROUND_Y - CELL) {
-    p.y = GROUND_Y - CELL; p.vy = 0; p.grounded = true; p.airTime = 0;
+  if (!orbHeld) {
+    p.y += p.vy * dt;
+
+    // ground / ceiling (spider)
+    p.grounded = false;
+    if (gm === 'spider' && (p.gdir || 1) < 0) {
+      if (p.y <= 0) { p.y = 0; p.vy = 0; p.grounded = true; p.airTime = 0; }
+    } else if (p.y >= GROUND_Y - CELL) {
+      p.y = GROUND_Y - CELL; p.vy = 0; p.grounded = true; p.airTime = 0;
+    }
   }
 
   const pbox = [p.x - 22, p.y, 44, 44];
@@ -1842,8 +2155,8 @@ function updateRun(dt) {
   for (const obj of near) {
     const r = objRect(obj);
     if (!aabb(pbox, r)) continue;
-    switch (obj.t) {
-      case 'block': {
+switch (obj.t) {
+    case 'block': {
         // landing from above
         if (p.vy >= 0 && prevBottom <= r[1] + 10) {
           p.y = r[1] - CELL; p.vy = 0; p.grounded = true; p.airTime = 0;
@@ -1862,9 +2175,32 @@ function updateRun(dt) {
         break;
       }
       case 'spike': { if (!mods.noclip) { die(); return; } break; }
-      case 'pad': {
+case 'pad': {
         if (run.padCd <= 0) {
           p.vy = -PAD_V * mods.jump; p.grounded = false; run.padCd = 0.35; hitPad = true;
+          sfx.pad();
+        }
+        break;
+      }
+      case 'dashorb': {
+        if (!run.orbHold && (jumpHeld || (performance.now() - (run.dashArm || 0)) < 250)) {
+          run.orbHold = true;
+          run.orbY = rowY(obj.y) - 30;
+          p.y = run.orbY;
+          p.vy = 0;
+          p.grounded = false;
+          spawnBurst(p.x, p.y + CELL / 2, 18, ['#00ffa3', '#ffffff', '#ffd000']);
+          sfx.pad();
+        }
+        break;
+      }
+      case 'portal_cube': case 'portal_ship': case 'portal_wave':
+      case 'portal_ufo': case 'portal_robot': case 'portal_spider': {
+        const gm2 = obj.t.slice(7);
+        if (p.gm !== gm2) {
+          p.gm = gm2;
+          if (p.gm !== 'spider') p.gdir = 1;
+          spawnBurst(p.x, p.y + CELL / 2, 16, ['#ffffff', '#ffd000', '#00e5ff']);
           sfx.pad();
         }
         break;
@@ -1880,18 +2216,27 @@ function updateRun(dt) {
   if (hitPad) run.padCd = 0.35;
 
   // hold to jump: auto-jump when landing while the button is held
-  if (settings.autoJump && jumpHeld && (p.grounded || mods.infJump)) {
+  if (settings.autoJump && jumpHeld && (p.grounded || mods.infJump) && (gm === 'cube' || gm === 'robot') && !orbHeld) {
     p.vy = -run.jv * mods.jump;
     p.grounded = false;
     sfx.jump();
   }
 
   // rotation
-  if (p.grounded) {
-    const target = Math.round(p.rot / (Math.PI / 2)) * (Math.PI / 2);
-    p.rot += (target - p.rot) * Math.min(1, dt * 18);
+  if (orbHeld) {
+    p.rot = 0;
+  } else if (gm === 'cube' || gm === 'robot') {
+    if (p.grounded) {
+      const target = Math.round(p.rot / (Math.PI / 2)) * (Math.PI / 2);
+      p.rot += (target - p.rot) * Math.min(1, dt * 18);
+    } else {
+      p.rot += 5.5 * dt;
+    }
+  } else if (gm === 'ship' || gm === 'wave') {
+    const t = Math.max(-0.5, Math.min(0.5, p.vy / 2000));
+    p.rot = t * 0.5;
   } else {
-    p.rot += 5.5 * dt;
+    p.rot = 0;
   }
 
   // trail
@@ -1943,7 +2288,15 @@ function win() {
   if (runState !== 'playing') return;
   runState = 'won';
   winTimer = 2.6;
-  const key = run.level.key || 'custom';
+  const key = run.level.key || run.level.name || 'custom';
+  if (!stats.gotKey[key]) {
+    stats.gotKey[key] = true;
+    stats.keys++;
+    saveStats();
+    const kl = document.getElementById('winKeyLine');
+    if (kl) { kl.textContent = 'KEY COLLECTED +1 \u2014 TOTAL ' + stats.keys; kl.classList.remove('hidden'); }
+    updateStatsUI();
+  }
   if ((bests[key] || 0) < 100) {
     bests[key] = 100;
     store.set('gd_bests', bests);
@@ -2135,6 +2488,9 @@ function restoreDefaults() {
   Object.assign(mods, { noclip: false, infJump: false, gravity: 1, speed: 1, jump: 1, reverse: false, skipEnd: false, followCam: false, practice: false });
   store.set('gd_mods', mods);
   store.set('gd_bests', {});
+  stats = { keys: 0, total: 0, perLevel: {}, gotKey: {} };
+  saveStats();
+  updateStatsUI();
   store.set('gd_settings', { musicOn: true, musicVol: 0.6, sfxVol: 0.8, shake: true, particles: true, autoJump: false });
   document.getElementById('secRecovery').classList.add('hidden');
   closeSecOS();
@@ -2230,6 +2586,18 @@ function drawObject(obj) {
   const x = obj.x * CELL, y = rowY(obj.y);
   ctx.save();
   switch (obj.t) {
+    case 'dashorb': {
+      const cx2 = x + CELL / 2, cy2 = y + CELL / 2 + 6;
+      ctx.fillStyle = 'rgba(0,255,163,0.18)';
+      ctx.beginPath(); ctx.arc(cx2, cy2, 20, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#00ffa3';
+      ctx.beginPath(); ctx.arc(cx2, cy2, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx2, cy2, 12, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(cx2, cy2, 4, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
     case 'block': {
       ctx.fillStyle = icon.p;
       ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
@@ -2300,6 +2668,24 @@ function drawObject(obj) {
       ctx.closePath(); ctx.fill();
       break;
     }
+    case 'portal_cube': case 'portal_ship': case 'portal_wave':
+    case 'portal_ufo': case 'portal_robot': case 'portal_spider': {
+      const cols = { cube: '#00e5ff', ship: '#ff6ec7', wave: '#00ffa3', ufo: '#ffd000', robot: '#a78bfa', spider: '#ff5c5c' };
+      const gm2 = obj.t.slice(7);
+      const top = GROUND_Y - CELL * 5;
+      ctx.fillStyle = hexA(cols[gm2] || '#ffffff', 0.22);
+      ctx.fillRect(x + 4, top, CELL - 8, GROUND_Y - top);
+      ctx.strokeStyle = cols[gm2];
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x + 6, top, CELL - 12, GROUND_Y - top);
+      ctx.fillStyle = cols[gm2];
+      ctx.font = 'bold 15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(({ cube: 'C', ship: 'S', wave: 'W', ufo: 'U', robot: 'R', spider: 'K' })[gm2] || gm2[0].toUpperCase(), x + CELL / 2, top + 26);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      for (let py = top + 44; py < GROUND_Y - 8; py += 18) ctx.fillRect(x + 14, py, CELL - 28, 6);
+      break;
+    }
   }
   ctx.restore();
 }
@@ -2341,8 +2727,47 @@ function drawPlayer(p) {
   ctx.save();
   ctx.translate(cx, cy);
 
+  const gm = run.player.gm || 'cube';
   const sh = icon.sh;
-  if (sh === 'ball') {
+  if (gm === 'ship') {
+    ctx.rotate(p.rot);
+    ctx.fillStyle = icon.p;
+    ctx.beginPath();
+    ctx.moveTo(-22, -14); ctx.lineTo(18, -14); ctx.lineTo(26, 0); ctx.lineTo(18, 14); ctx.lineTo(-22, 14);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = icon.s;
+    ctx.fillRect(-22, -20, 10, 8);
+    ctx.fillRect(14, -4, 12, 8);
+  } else if (gm === 'wave') {
+    ctx.fillStyle = icon.p;
+    ctx.beginPath();
+    ctx.moveTo(-22, 0); ctx.lineTo(-6, -20); ctx.lineTo(2, -20); ctx.lineTo(-12, 0); ctx.lineTo(2, 20); ctx.lineTo(-6, 20);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = icon.s;
+    ctx.beginPath(); ctx.moveTo(-4, -10); ctx.lineTo(12, 0); ctx.lineTo(-4, 10); ctx.closePath(); ctx.fill();
+  } else if (gm === 'ufo') {
+    ctx.fillStyle = icon.p;
+    ctx.beginPath(); ctx.ellipse(0, 4, 22, 11, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = icon.s;
+    ctx.beginPath(); ctx.arc(0, -7, 13, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = icon.p; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = icon.p;
+    ctx.fillRect(-17, -1, 6, 4); ctx.fillRect(11, -1, 6, 4);
+  } else if (gm === 'spider') {
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-13, -8); ctx.lineTo(-27, -16); ctx.moveTo(-13, 8); ctx.lineTo(-27, 16);
+    ctx.moveTo(13, -8); ctx.lineTo(27, -16); ctx.moveTo(13, 8); ctx.lineTo(27, 16);
+    ctx.stroke();
+    ctx.fillStyle = icon.p;
+    ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = icon.s; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = icon.s;
+    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+  } else if (sh === 'ball') {
     ctx.rotate(p.rot);
     ctx.fillStyle = icon.p;
     ctx.beginPath(); ctx.arc(0, 0, 21, 0, Math.PI * 2); ctx.fill();
@@ -2614,6 +3039,7 @@ function frame(now) {
 document.addEventListener('pointerdown', audio, { once: false });
 buildLevelList();
 setBrush('spike');
+updateStatsUI();
 requestAnimationFrame(frame);
 </script>
 </body>

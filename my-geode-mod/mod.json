@@ -1,0 +1,92 @@
+{
+    "geode": "5.9.0",
+    "gd": {
+        "win": "2.2081",
+        "android": "2.2081"
+    },
+    "id": "antika.mod.geode",
+    "name": "antika geode mod",
+    "version": "1.6.0",
+    "developer": "antika",
+    "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
+    "repository": "https://github.com/rolikakiu/GeometryExtra",
+    "tags": ["Utility", "Gameplay", "Platformer"],
+    "dependencies": {
+        "eclipse.eclipse-menu": {
+            "version": ">=v1.9.4",
+            "required": false
+        }
+    },
+    "settings": {
+        "disable": {
+            "type": "bool",
+            "name": "Disable",
+            "description": "Play level 149188646 on the main menu and show the ending dialog after beating it.",
+            "default": false
+        },
+        "neghit": {
+            "type": "bool",
+            "name": "Negative Hitboxes",
+            "description": "Set every object's size to -1 and turn off the level's \"Fix Negative Scale\" option, so every hitbox becomes negative (objects are safe, the empty space is deadly).",
+            "default": false
+        },
+        "negative": {
+            "type": "bool",
+            "name": "Negative",
+            "description": "Invert the world: upside-down play and photo-negative colors on top of Negative Hitboxes. Can only be enabled when Negative Hitboxes is on.",
+            "default": false,
+            "depends_on": {
+                "neghit": true
+            }
+        },
+        "accurate": {
+            "type": "bool",
+            "name": "Accurate Hitboxes",
+            "description": "Make spike and saw hitboxes accurate: you die on the real shape of the object (triangle for spikes, circle for saws) instead of the rough rectangle.",
+            "default": false
+        },
+        "truehit": {
+            "type": "bool",
+            "name": "TRUE Hitboxes",
+            "description": "Make EVERY object's hitbox accurate: the accurate shape check is applied to every hazard, not just spikes and saws. Can only be enabled when Accurate Hitboxes is on.",
+            "default": false,
+            "depends_on": {
+                "accurate": true
+            }
+        },
+        "noclip": {
+            "type": "bool",
+            "name": "Noclip",
+            "description": "Spikes can't touch you and blocks are passable: you can fly through everything and never die.",
+            "default": false
+        },
+        "force-ice": {
+            "type": "bool",
+            "name": "Force Ice",
+            "description": "Every block becomes an ice block in platformer mode, so all surfaces are slippery.",
+            "default": false
+        },
+        "force-platformer": {
+            "type": "bool",
+            "name": "Force Platformer",
+            "description": "Play classic levels in platformer mode.",
+            "default": false
+        },
+        "all-modes-platformer": {
+            "type": "bool",
+            "name": "All Modes in Platformer",
+            "description": "Play platformer levels as any game mode (Ship, Ball, UFO, Wave, Robot, Spider or Swing) instead of only Cube.",
+            "default": false
+        },
+        "platformer-mode": {
+            "type": "string",
+            "name": "Platformer Mode",
+            "description": "Which mode to play as in platformer levels when All Modes in Platformer is on.",
+            "default": "Robot",
+            "options": ["Cube", "Ship", "Ball", "UFO", "Wave", "Robot", "Spider", "Swing"],
+            "depends_on": {
+                "all-modes-platformer": true
+            }
+        }
+    }
+}
