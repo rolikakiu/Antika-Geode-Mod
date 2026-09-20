@@ -19,6 +19,7 @@ static bool noclipOn() { return Mod::get()->getSettingValue<bool>("noclip"); }
 static bool forceIceOn() { return Mod::get()->getSettingValue<bool>("force-ice"); }
 static bool forcePlatformerOn() { return Mod::get()->getSettingValue<bool>("force-platformer"); }
 static bool allModesPlatformerOn() { return Mod::get()->getSettingValue<bool>("all-modes-platformer"); }
+static bool make3dOn() { return Mod::get()->getSettingValue<bool>("make-3d"); }
 
 static GameObjectType chosenPlatformerMode() {
     auto s = Mod::get()->getSettingValue<std::string>("platformer-mode");
@@ -253,6 +254,28 @@ class $modify(NegAccurateLayer, GJBaseGameLayer) {
     }
 };
 
+/* ---------------- Make Everything 3D ---------------- */
+static void applyMakeEverything3D(PlayLayer* layer) {
+    auto shaderLayer = layer->m_shaderLayer;
+    if (!shaderLayer) return;
+
+    shaderLayer->updateZLayer(2, 14, false);
+
+    shaderLayer->m_state.m_blurRefChannel = 1234;
+    shaderLayer->m_state.m_blurRefColor = cocos2d::ccc3(255, 255, 255);
+
+    shaderLayer->triggerRadialBlur(
+        0.5f, -0.50f, 500000.f, 1.00f, 1234,
+        0.f, 0.f, false, 0, 0, 0.f, true
+    );
+
+    shaderLayer->triggerBulge(
+        0.5f, 0.25f,
+        0.f, 0.f, 0.f,
+        0, 0, 0.f, false
+    );
+}
+
 static bool s_launchedOnce = false;
 static bool s_endingPending = false;
 static bool s_endingShown = false;
@@ -390,6 +413,17 @@ class $modify(NegPlayLayer, PlayLayer) {
             m_levelSettings->m_fixNegativeScale = false;
         }
         PlayLayer::setupHasCompleted();
+
+        if (make3dOn()) {
+            applyMakeEverything3D(this);
+        }
+    }
+
+    void resetLevel() {
+        PlayLayer::resetLevel();
+        if (make3dOn()) {
+            applyMakeEverything3D(this);
+        }
     }
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {

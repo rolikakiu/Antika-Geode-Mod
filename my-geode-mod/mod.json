@@ -6,10 +6,10 @@
     },
     "id": "rolikakiu.multimode",
     "name": "antika geode mod",
-    "version": "1.6.0",
+    "version": "1.6.2",
     "developer": "rolikakiu",
     "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
-    "repository": "https://github.com/rolikakiu/GeometryExtra",
+    "repository": "https://github.com/rolikakiu/Antika-Geode-Mod",
     "tags": ["gameplay", "enhancement"],
     "dependencies": {
         "eclipse.eclipse-menu": {
@@ -72,6 +72,12 @@
             "description": "Play classic levels in platformer mode.",
             "default": false
         },
+        "make-3d": {
+            "type": "bool",
+            "name": "Make Everything 3D",
+            "description": "Apply the famous 3D shader look to every level: Radial Blur (size -0.50, intensity 500000, ref channel 1234, empty-only), Bulge of 0.25 and the shader covering layers B5 to Max.",
+            "default": false
+        },
         "all-modes-platformer": {
             "type": "bool",
             "name": "All Modes in Platformer",
@@ -88,5 +94,10 @@
                 "all-modes-platformer": true
             }
         }
+    },
+    "changelog": {
+        "1.6.2": "Fix: the Make Everything 3D effect now stays on when you die and respawn instead of turning off.",
+        "1.6.1": "Add TRUE Hitboxes toggle and make every hazardous object's hitbox accurate.",
+        "1.6.0": "Add Accurate Hitboxes for spikes and saws, Force Ice, and Force Platformer toggles."
     }
 }
