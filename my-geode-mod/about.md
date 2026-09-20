@@ -1,14 +1,1 @@
-# antika geode mod
-
-## Changelog
-
-- **1.6.0** — Add All Modes in Platformer: play platformer levels as Ship, Ball, UFO, Wave, Robot, Spider or Swing (pick it in the mod settings) instead of only Cube.
-- **1.5.0** — Add Noclip (spikes notouch, blocks passable, no deaths), Force Ice (every block is ice in platformer), and Force Platformer (classic levels in platformer mode).
-- **1.4.0** — Add Eclipse integration: an "antika" tab with toggles for all settings (Story, Negative Hitboxes, Negative, Accurate Hitboxes, TRUE Hitboxes) synced to Eclipse config.
-- **1.3.0** — Add Accurate Hitboxes (accurate spike/saw shapes, kills + debug draw) and TRUE Hitboxes (every hazard gets an accurate hitbox; requires Accurate Hitboxes).
-- **1.2.0** — Rewrite Negative Hitboxes to use the real technique: negate every object's scale (-1) and turn off the level's "Fix Negative Scale". Removed Safe-Mode setting.
-- **1.1.0** — Add Negative Hitboxes (hazards safe, die in empty space), Negative (upside-down world flip, inverted landing, photo-negative filter; only enable-able with Negative Hitboxes), and Safe-Mode settings.
-- **1.0.3** — Rename setting to "disable": when enabled, play level 149188646 and show the ending dialog after beating it.
-- **1.0.2** — Fix popup not showing when "end" is enabled.
-- **1.0.1** — Fix "end": close the popup when leaving the main menu.
-- **1.0.0** — Release.
+hi, its geode mod
