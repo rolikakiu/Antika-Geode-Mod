@@ -279,6 +279,7 @@ static void applyMakeEverything3D(PlayLayer* layer) {
 static bool s_launchedOnce = false;
 static bool s_endingPending = false;
 static bool s_endingShown = false;
+static DialogLayer* s_dialog = nullptr;
 
 DialogLayer* createEndingDialog() {
     auto dialogLines = CCArray::create();
@@ -312,6 +313,45 @@ void launchEndLevel(GJGameLevel* level) {
     cocos2d::CCDirector::get()->replaceScene(scene);
 }
 
+static bool isOnCurrentScene(cocos2d::CCNode* node) {
+    auto running = cocos2d::CCDirector::get()->getRunningScene();
+    for (auto p = node; p != nullptr; p = p->getParent()) {
+        if (p == running) return true;
+    }
+    return false;
+}
+
+static void reapDialog() {
+    if (!s_dialog) return;
+    if (s_dialog->getParent() == nullptr || !isOnCurrentScene(s_dialog)) {
+        s_dialog->removeFromParent();
+        s_dialog = nullptr;
+    }
+}
+
+static void showEndingDialog() {
+    reapDialog();
+    if (s_dialog) {
+        s_dialog->removeFromParent();
+        s_dialog = nullptr;
+        return;
+    }
+    if (!cocos2d::CCDirector::get()->getRunningScene()) return;
+    auto dialog = createEndingDialog();
+    dialog->addToMainScene();
+    s_dialog = dialog;
+}
+
+$on_mod(Loaded) {
+    KeybindSettingPressedEventV3(Mod::get(), "ending-dialog-key")
+        .listen([](Keybind const&, bool down, bool repeat, double) -> bool {
+            if (!down || repeat) return false;
+            showEndingDialog();
+            return true;
+        })
+        .leak();
+}
+
 class EndLevelDownloadDelegate : public LevelDownloadDelegate {
 public:
     LevelDownloadDelegate* m_previous = nullptr;
@@ -331,10 +371,6 @@ public:
 };
 
 class $modify(AntikaMenuLayer, MenuLayer) {
-    struct Fields {
-        DialogLayer* m_dialog = nullptr;
-    };
-
     bool init() {
         if (!MenuLayer::init()) {
             return false;
@@ -350,7 +386,7 @@ class $modify(AntikaMenuLayer, MenuLayer) {
                 log::info("antika: showing ending dialog");
                 auto dialog = createEndingDialog();
                 dialog->addToMainScene();
-                m_fields->m_dialog = dialog;
+                s_dialog = dialog;
             }
             else if (!s_launchedOnce) {
                 s_launchedOnce = true;
@@ -376,26 +412,8 @@ class $modify(AntikaMenuLayer, MenuLayer) {
     }
 
     void update(float dt) {
-        auto dialog = m_fields->m_dialog;
-        if (dialog) {
-            if (dialog->getParent() == nullptr) {
-                m_fields->m_dialog = nullptr;
-            }
-            else {
-                auto running = cocos2d::CCDirector::get()->getRunningScene();
-                bool visible = false;
-                for (auto p = this->getParent(); p != nullptr; p = p->getParent()) {
-                    if (p == running) {
-                        visible = true;
-                        break;
-                    }
-                }
-                if (!visible) {
-                    dialog->removeFromParent();
-                    m_fields->m_dialog = nullptr;
-                }
-            }
-        }
+        MenuLayer::update(dt);
+        reapDialog();
     }
 };
 
@@ -403,6 +421,11 @@ class $modify(AntikaPlayLayer, PlayLayer) {
     struct Fields {
         cocos2d::CCLayerColor* m_invert = nullptr;
     };
+
+    void update(float dt) {
+        PlayLayer::update(dt);
+        reapDialog();
+    }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
         if (noclipOn()) return;

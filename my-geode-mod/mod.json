@@ -6,7 +6,7 @@
     },
     "id": "rolikakiu.multimode",
     "name": "antika geode mod",
-    "version": "1.6.4",
+    "version": "1.6.5",
     "developer": "rolikakiu",
     "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
     "repository": "https://github.com/rolikakiu/Antika-Geode-Mod",
@@ -40,6 +40,13 @@
         }
     },
     "settings": {
+        "ending-dialog-key": {
+            "type": "keybind",
+            "name": "Show Ending Dialog",
+            "description": "Press this to show the story ending dialog again at any time. The key can be changed in Geode's keybind settings.",
+            "default": "Ctrl+Shift+K",
+            "category": "universal"
+        },
         "disable": {
             "type": "bool",
             "name": "Story Mode",
