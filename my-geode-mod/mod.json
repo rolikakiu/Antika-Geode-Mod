@@ -19,23 +19,23 @@
     },
     "incompatibilities": {
         "demiomad.negative-hitboxes": {
-            "version": "*",
+            "version": ">=0.0.0",
             "breaking": true
         },
         "prevter.openhack": {
-            "version": "*",
+            "version": ">=0.0.0",
             "breaking": false
         },
         "tobyadd.gdh": {
-            "version": "*",
+            "version": ">=0.0.0",
             "breaking": false
         },
         "thesillydoggo.qolmod": {
-            "version": "*",
+            "version": ">=0.0.0",
             "breaking": false
         },
         "firee.prism": {
-            "version": "*",
+            "version": ">=0.0.0",
             "breaking": false
         }
     },
