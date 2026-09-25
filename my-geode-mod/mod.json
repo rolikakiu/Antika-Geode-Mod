@@ -116,11 +116,5 @@
                 "all-modes-platformer": true
             }
         }
-    },
-    "changelog": {
-        "1.6.3": "Add Android support: the mod now builds and runs on Android (2.2081) as well as Windows. Also: renamed the misleading \"Disable\" setting to \"Story Mode\", declared an incompatibility with other Negative Hitboxes mods, gave the mod's nodes prefixed IDs, and fixed the Accurate Hitboxes debug overlay not lining up with the real hitbox on rotated spikes.",
-        "1.6.2": "Fix: the Make Everything 3D effect now stays on when you die and respawn instead of turning off.",
-        "1.6.1": "Add TRUE Hitboxes toggle and make every hazardous object's hitbox accurate.",
-        "1.6.0": "Add Accurate Hitboxes for spikes and saws, Force Ice, and Force Platformer toggles."
     }
 }
