@@ -1,12 +1,12 @@
 {
-    "geode": "5.9.0",
+    "geode": "5.10.1",
     "gd": {
         "win": "2.2081",
         "android": "2.2081"
     },
     "id": "rolikakiu.multimode",
     "name": "antika geode mod",
-    "version": "1.6.2",
+    "version": "1.6.4",
     "developer": "rolikakiu",
     "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
     "repository": "https://github.com/rolikakiu/Antika-Geode-Mod",
@@ -17,11 +17,33 @@
             "required": false
         }
     },
+    "incompatibilities": {
+        "demiomad.negative-hitboxes": {
+            "version": "*",
+            "breaking": true
+        },
+        "prevter.openhack": {
+            "version": "*",
+            "breaking": false
+        },
+        "tobyadd.gdh": {
+            "version": "*",
+            "breaking": false
+        },
+        "thesillydoggo.qolmod": {
+            "version": "*",
+            "breaking": false
+        },
+        "firee.prism": {
+            "version": "*",
+            "breaking": false
+        }
+    },
     "settings": {
         "disable": {
             "type": "bool",
-            "name": "Disable",
-            "description": "Play level 149188646 on the main menu and show the ending dialog after beating it.",
+            "name": "Story Mode",
+            "description": "When enabled, level 149188646 is played automatically on the main menu and an ending dialog appears after you beat it.",
             "default": false
         },
         "neghit": {
@@ -96,6 +118,7 @@
         }
     },
     "changelog": {
+        "1.6.3": "Add Android support: the mod now builds and runs on Android (2.2081) as well as Windows. Also: renamed the misleading \"Disable\" setting to \"Story Mode\", declared an incompatibility with other Negative Hitboxes mods, gave the mod's nodes prefixed IDs, and fixed the Accurate Hitboxes debug overlay not lining up with the real hitbox on rotated spikes.",
         "1.6.2": "Fix: the Make Everything 3D effect now stays on when you die and respawn instead of turning off.",
         "1.6.1": "Add TRUE Hitboxes toggle and make every hazardous object's hitbox accurate.",
         "1.6.0": "Add Accurate Hitboxes for spikes and saws, Force Ice, and Force Platformer toggles."

@@ -17,6 +17,7 @@ static void eclipseSyncAll() {
     eclipse::config::set("antika-force-ice", mod->getSettingValue<bool>("force-ice"));
     eclipse::config::set("antika-force-platformer", mod->getSettingValue<bool>("force-platformer"));
     eclipse::config::set("antika-all-modes-platformer", mod->getSettingValue<bool>("all-modes-platformer"));
+    eclipse::config::set("antika-make-3d", mod->getSettingValue<bool>("make-3d"));
 }
 
 $on_mod(Loaded) {
@@ -31,7 +32,8 @@ $on_mod(Loaded) {
                 || mod->getSettingValue<bool>("negative")
                 || mod->getSettingValue<bool>("accurate")
                 || mod->getSettingValue<bool>("truehit")
-                || mod->getSettingValue<bool>("noclip");
+                || mod->getSettingValue<bool>("noclip")
+                || mod->getSettingValue<bool>("make-3d");
         });
 
         auto tab = eclipse::MenuTab::find("antika");
@@ -72,6 +74,10 @@ $on_mod(Loaded) {
             Mod::get()->setSettingValue("all-modes-platformer", value);
         }).setDescription("Play platformer levels as any game mode instead of only Cube. Pick the mode in the mod settings.");
 
+        tab.addToggle("antika-make-3d", "Make Everything 3D", [](bool value) {
+            Mod::get()->setSettingValue("make-3d", value);
+        }).setDescription("Apply the famous 3D shader look to every level (Radial Blur -0.50 size / 500000 intensity / ref channel 1234, Bulge 0.25, B5 to Max).");
+
         eclipseSyncAll();
 
         geode::listenForSettingChanges<bool>("disable", [](bool value) {
@@ -100,6 +106,9 @@ $on_mod(Loaded) {
         });
         geode::listenForSettingChanges<bool>("all-modes-platformer", [](bool value) {
             eclipse::config::set("antika-all-modes-platformer", value);
+        });
+        geode::listenForSettingChanges<bool>("make-3d", [](bool value) {
+            eclipse::config::set("antika-make-3d", value);
         });
     });
 }

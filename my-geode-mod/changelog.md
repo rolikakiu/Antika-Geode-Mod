@@ -1,5 +1,7 @@
 # antika geode mod — Changelog
 
+- **1.6.4** — Combined release: the single .geode package now ships every platform together (Windows `rolikakiu.multimode.dll`, Android 32-bit `rolikakiu.multimode.android32.so`, Android 64-bit `rolikakiu.multimode.android64.so`), so one download installs on all of them. No gameplay or bugfix changes since 1.6.3.
+- **1.6.3** — Add Android support: the mod now builds and runs on Android (2.2081) as well as Windows. Also: renamed the misleading "Disable" setting to "Story Mode", declared an incompatibility with other Negative Hitboxes mods, gave the mod's nodes prefixed IDs, and fixed the Accurate Hitboxes debug overlay not lining up with the real hitbox on rotated spikes.
 - **1.6.2** — Fix: the Make Everything 3D effect now stays on when you die and respawn instead of turning off.
 - **1.6.1** — Re-upload: hosted on the dedicated Antika-Geode-Mod repository.
 - **1.6.0** — Add All Modes in Platformer: play platformer levels as Ship, Ball, UFO, Wave, Robot, Spider or Swing (pick it in the mod settings) instead of only Cube.

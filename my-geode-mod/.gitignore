@@ -1,0 +1,11 @@
+build/
+build-*/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+.geode/
+*.geode
+*.log
+.vscode/
+.idea/
+compile_commands.json

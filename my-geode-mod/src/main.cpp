@@ -47,7 +47,7 @@ static void applyPlatformerMode(PlayerObject* player) {
     }
 }
 
-class $modify(NegNoClipPlayer, PlayerObject) {
+class $modify(AntikaPlayerObject, PlayerObject) {
     bool collidedWithObject(float dt, GameObject* object, cocos2d::CCRect rect, bool skipCheck) {
         if (noclipOn()) return false;
         return PlayerObject::collidedWithObject(dt, object, rect, skipCheck);
@@ -64,7 +64,7 @@ class $modify(NegNoClipPlayer, PlayerObject) {
     }
 };
 
-class $modify(NegObjHook, GameObject) {
+class $modify(AntikaGameObject, GameObject) {
     void activateObject() override {
         GameObject::activateObject();
 
@@ -96,43 +96,43 @@ inline const std::set<int> sSawIDs = {
     1619, 1620, 1701, 1702, 1703, 1705, 1706, 1707, 1708, 1709, 1710, 1734, 1735, 1736
 };
 
-static float negDeg2rad(float degrees) {
+static float hitDeg2rad(float degrees) {
     return degrees * (3.14159265359f / 180.0f);
 }
 
-static float negSignPt(cocos2d::CCPoint p1, cocos2d::CCPoint p2, cocos2d::CCPoint p3) {
+static float hitSignPt(cocos2d::CCPoint p1, cocos2d::CCPoint p2, cocos2d::CCPoint p3) {
     return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
 }
 
-static bool negPointInTriangle(cocos2d::CCPoint pt, cocos2d::CCPoint v1, cocos2d::CCPoint v2, cocos2d::CCPoint v3) {
-    float d1 = negSignPt(pt, v1, v2);
-    float d2 = negSignPt(pt, v2, v3);
-    float d3 = negSignPt(pt, v3, v1);
+static bool hitPointInTriangle(cocos2d::CCPoint pt, cocos2d::CCPoint v1, cocos2d::CCPoint v2, cocos2d::CCPoint v3) {
+    float d1 = hitSignPt(pt, v1, v2);
+    float d2 = hitSignPt(pt, v2, v3);
+    float d3 = hitSignPt(pt, v3, v1);
     bool hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
     bool hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
     return !(hasNeg && hasPos);
 }
 
-static float negDist(cocos2d::CCPoint a, cocos2d::CCPoint b) {
+static float hitDist(cocos2d::CCPoint a, cocos2d::CCPoint b) {
     return sqrtf(powf(b.x - a.x, 2.0f) + powf(b.y - a.y, 2.0f));
 }
 
-static float negTruePlayerSize(PlayerObject* player) {
+static float hitPlayerSize(PlayerObject* player) {
     float base = 32.0f;
     if (player->m_isDart) base *= 0.28f;
     base *= player->m_vehicleSize;
     return base / 2.208f;
 }
 
-static bool negTriangleHit(PlayerObject* player, GameObject* gObj) {
+static bool hitTriangle(PlayerObject* player, GameObject* gObj) {
     cocos2d::CCPoint playerPos = player->getPosition();
     cocos2d::CCPoint gPos = gObj->getUnmodifiedPosition();
     cocos2d::CCSize cs = gObj->getContentSize();
     cs.width *= gObj->getScaleX();
     cs.height *= gObj->getScaleY();
-    float rot = negDeg2rad(gObj->getRotation());
+    float rot = hitDeg2rad(gObj->getRotation());
 
-    float playerSize = negTruePlayerSize(player);
+    float playerSize = hitPlayerSize(player);
     cocos2d::CCRect pr(playerPos.x - playerSize, playerPos.y - playerSize, playerSize * 2, playerSize * 2);
 
     auto rotPoint = [&](float x, float y) -> cocos2d::CCPoint {
@@ -157,17 +157,17 @@ static bool negTriangleHit(PlayerObject* player, GameObject* gObj) {
         { pr.getMaxX(), pr.getMaxY() }
     };
     for (auto& c : corners) {
-        if (negPointInTriangle(c, top, bl, br)) return true;
+        if (hitPointInTriangle(c, top, bl, br)) return true;
     }
     return false;
 }
 
-static bool negCircleHit(PlayerObject* player, GameObject* gObj) {
+static bool hitCircle(PlayerObject* player, GameObject* gObj) {
     cocos2d::CCPoint gPos = gObj->getPosition();
     cocos2d::CCSize cs = gObj->getContentSize();
     float radius = (cs.width + cs.height) / 2.0f * gObj->getScale() / 2.08f;
 
-    float ps = negTruePlayerSize(player);
+    float ps = hitPlayerSize(player);
     cocos2d::CCPoint corners[4] = {
         { player->getPositionX() - ps, player->getPositionY() - ps },
         { player->getPositionX() + ps, player->getPositionY() - ps },
@@ -175,7 +175,7 @@ static bool negCircleHit(PlayerObject* player, GameObject* gObj) {
         { player->getPositionX() + ps, player->getPositionY() + ps }
     };
     for (auto& c : corners) {
-        if (negDist(c, gPos) <= radius) return true;
+        if (hitDist(c, gPos) <= radius) return true;
     }
     return false;
 }
@@ -190,12 +190,12 @@ static bool accurateIsSaw(GameObject* g) {
     return sSawIDs.contains(g->m_objectID);
 }
 
-static void negDrawSpike(cocos2d::CCDrawNode* node, GameObject* gObj) {
-    cocos2d::CCPoint gPos = gObj->getPosition();
+static void hitDrawSpike(cocos2d::CCDrawNode* node, GameObject* gObj) {
+    cocos2d::CCPoint gPos = gObj->getUnmodifiedPosition();
     cocos2d::CCSize cs = gObj->getContentSize();
     cs.width *= gObj->getScaleX();
     cs.height *= gObj->getScaleY();
-    float rot = negDeg2rad(gObj->getRotation());
+    float rot = hitDeg2rad(gObj->getRotation());
 
     auto rotPoint = [&](float x, float y) -> cocos2d::CCPoint {
         return {
@@ -211,14 +211,14 @@ static void negDrawSpike(cocos2d::CCDrawNode* node, GameObject* gObj) {
     node->drawPolygon(verts, 3, { 0.f, 0.f, 0.f, 0.f }, 0.5f, { 1.f, 0.f, 0.f, 1.f });
 }
 
-static void negDrawSaw(cocos2d::CCDrawNode* node, GameObject* gObj) {
+static void hitDrawSaw(cocos2d::CCDrawNode* node, GameObject* gObj) {
     cocos2d::CCPoint gPos = gObj->getPosition();
     cocos2d::CCSize cs = gObj->getContentSize();
     float radius = (cs.width + cs.height) / 2.0f * gObj->getScale() / 1.04f / 2.0f;
     node->drawCircle(gPos, radius, { 1.f, 0.f, 0.f, 0.2f }, 0.5f, { 1.f, 0.f, 0.f, 1.f }, 16);
 }
 
-class $modify(NegAccurateLayer, GJBaseGameLayer) {
+class $modify(AntikaCollisionLayer, GJBaseGameLayer) {
     void collisionCheckObjects(PlayerObject* object, gd::vector<GameObject*>* objects, int objectCount, float dt) {
         GJBaseGameLayer::collisionCheckObjects(object, objects, objectCount, dt);
 
@@ -233,7 +233,7 @@ class $modify(NegAccurateLayer, GJBaseGameLayer) {
             if (ox < px - 600 || ox > px + 600) continue;
             if (!accurateTarget(g)) continue;
 
-            bool hit = accurateIsSaw(g) ? negCircleHit(object, g) : negTriangleHit(object, g);
+            bool hit = accurateIsSaw(g) ? hitCircle(object, g) : hitTriangle(object, g);
             if (hit) {
                 this->destroyPlayer(object, g);
                 break;
@@ -248,8 +248,8 @@ class $modify(NegAccurateLayer, GJBaseGameLayer) {
         for (int i = 0; i < m_activeObjectsCount; i++) {
             GameObject* g = m_activeObjects.at(i);
             if (!g || !accurateTarget(g)) continue;
-            if (accurateIsSaw(g)) negDrawSaw(m_debugDrawNode, g);
-            else negDrawSpike(m_debugDrawNode, g);
+            if (accurateIsSaw(g)) hitDrawSaw(m_debugDrawNode, g);
+            else hitDrawSpike(m_debugDrawNode, g);
         }
     }
 };
@@ -303,6 +303,7 @@ DialogLayer* createEndingDialog() {
     auto dialog = DialogLayer::createWithObjects(dialogLines, background);
     dialog->updateChatPlacement(DialogChatPlacement::Center);
     dialog->animateInRandomSide();
+    dialog->setID("rolikakiu.multimode-ending-dialog"_spr);
     return dialog;
 }
 
@@ -398,7 +399,7 @@ class $modify(AntikaMenuLayer, MenuLayer) {
     }
 };
 
-class $modify(NegPlayLayer, PlayLayer) {
+class $modify(AntikaPlayLayer, PlayLayer) {
     struct Fields {
         cocos2d::CCLayerColor* m_invert = nullptr;
     };
@@ -458,6 +459,7 @@ class $modify(NegPlayLayer, PlayLayer) {
                 bf.dst = 0x0000; // GL_ZERO
                 invert->setBlendFunc(bf);
                 invert->setZOrder(10000);
+                invert->setID("rolikakiu.multimode-negative-invert-layer"_spr);
                 scene->addChild(invert, 10000);
                 m_fields->m_invert = invert;
             }
