@@ -24,46 +24,81 @@ static bool make3dOn() { return Mod::get()->getSettingValue<bool>("make-3d"); }
 static bool noCameraMoveOn() { return Mod::get()->getSettingValue<bool>("no-camera-move"); }
 static bool forceGamemodeOn() { return Mod::get()->getSettingValue<bool>("force-gamemode"); }
 
-static GameObjectType modeFromName(std::string const& s) {
-    if (s == "Ship") return GameObjectType::ShipPortal;
-    if (s == "Ball") return GameObjectType::BallPortal;
-    if (s == "UFO") return GameObjectType::UfoPortal;
-    if (s == "Wave") return GameObjectType::WavePortal;
-    if (s == "Robot") return GameObjectType::RobotPortal;
-    if (s == "Spider") return GameObjectType::SpiderPortal;
-    if (s == "Swing") return GameObjectType::SwingPortal;
-    return GameObjectType::CubePortal;
+enum class ForcedMode { Cube, Ship, Ball, UFO, Wave, Robot, Spider, Swing };
+
+static ForcedMode modeFromName(std::string const& s) {
+    if (s == "Ship") return ForcedMode::Ship;
+    if (s == "Ball") return ForcedMode::Ball;
+    if (s == "UFO") return ForcedMode::UFO;
+    if (s == "Wave") return ForcedMode::Wave;
+    if (s == "Robot") return ForcedMode::Robot;
+    if (s == "Spider") return ForcedMode::Spider;
+    if (s == "Swing") return ForcedMode::Swing;
+    return ForcedMode::Cube;
 }
 
-static GameObjectType chosenPlatformerMode() {
-    return modeFromName(Mod::get()->getSettingValue<std::string>("platformer-mode"));
+static ForcedMode playerMode(PlayerObject* player) {
+    if (player->m_isDart) return ForcedMode::Wave;
+    if (player->m_isSwing) return ForcedMode::Swing;
+    if (player->m_isRobot) return ForcedMode::Robot;
+    if (player->m_isSpider) return ForcedMode::Spider;
+    if (player->m_isBird) return ForcedMode::UFO;
+    if (player->m_isShip) return ForcedMode::Ship;
+    if (player->m_isBall) return ForcedMode::Ball;
+    return ForcedMode::Cube;
 }
 
-static GameObjectType chosenClassicMode() {
-    return modeFromName(Mod::get()->getSettingValue<std::string>("gamemode"));
-}
-
-static void toggleChosenMode(PlayerObject* player, GameObjectType mode) {
+static void enterMode(PlayerObject* player, ForcedMode mode) {
     switch (mode) {
-        case GameObjectType::ShipPortal: player->toggleFlyMode(true, true); break;
-        case GameObjectType::BallPortal: player->toggleRollMode(true, true); break;
-        case GameObjectType::UfoPortal: player->toggleBirdMode(true, true); break;
-        case GameObjectType::WavePortal: player->toggleDartMode(true, true); break;
-        case GameObjectType::RobotPortal: player->toggleRobotMode(true, true); break;
-        case GameObjectType::SpiderPortal: player->toggleSpiderMode(true, true); break;
-        case GameObjectType::SwingPortal: player->toggleSwingMode(true, true); break;
+        case ForcedMode::Ship: player->toggleFlyMode(true, true); break;
+        case ForcedMode::Ball: player->toggleRollMode(true, true); break;
+        case ForcedMode::UFO: player->toggleBirdMode(true, true); break;
+        case ForcedMode::Wave: player->toggleDartMode(true, true); break;
+        case ForcedMode::Robot: player->toggleRobotMode(true, true); break;
+        case ForcedMode::Spider: player->toggleSpiderMode(true, true); break;
+        case ForcedMode::Swing: player->toggleSwingMode(true, true); break;
         default: break;
     }
 }
 
-static void applyPlatformerMode(PlayerObject* player) {
-    if (!player || !allModesPlatformerOn() || !player->m_isPlatformer) return;
-    toggleChosenMode(player, chosenPlatformerMode());
+static void leaveMode(PlayerObject* player, ForcedMode mode) {
+    switch (mode) {
+        case ForcedMode::Ship: player->toggleFlyMode(false, true); break;
+        case ForcedMode::Ball: player->toggleRollMode(false, true); break;
+        case ForcedMode::UFO: player->toggleBirdMode(false, true); break;
+        case ForcedMode::Wave: player->toggleDartMode(false, true); break;
+        case ForcedMode::Robot: player->toggleRobotMode(false, true); break;
+        case ForcedMode::Spider: player->toggleSpiderMode(false, true); break;
+        case ForcedMode::Swing: player->toggleSwingMode(false, true); break;
+        default: break;
+    }
 }
 
-static void applyClassicMode(PlayerObject* player) {
-    if (!player || !forceGamemodeOn() || player->m_isPlatformer) return;
-    toggleChosenMode(player, chosenClassicMode());
+// the mode the level wants this player to be in, if any toggle is forcing one
+static bool wantedForcedMode(PlayerObject* player, ForcedMode& out) {
+    if (!player) return false;
+    if (player->m_isPlatformer) {
+        if (!allModesPlatformerOn()) return false;
+        out = modeFromName(Mod::get()->getSettingValue<std::string>("platformer-mode"));
+        return true;
+    }
+    if (!forceGamemodeOn()) return false;
+    out = modeFromName(Mod::get()->getSettingValue<std::string>("gamemode"));
+    return true;
+}
+
+// re-applied every frame so level portals can't take the mode away again
+static void applyForcedMode(PlayerObject* player) {
+    if (!player || player->m_editorEnabled) return;
+
+    ForcedMode want;
+    if (!wantedForcedMode(player, want)) return;
+
+    auto current = playerMode(player);
+    if (current == want) return;
+
+    if (want == ForcedMode::Cube) leaveMode(player, current);
+    else enterMode(player, want);
 }
 
 static void applyForceGameMode(PlayLayer* layer) {
@@ -98,10 +133,14 @@ class $modify(AntikaPlayerObject, PlayerObject) {
         return PlayerObject::collidedWithObjectInternal(dt, object, rect, skipCheck);
     }
 
+    void update(float dt) {
+        PlayerObject::update(dt);
+        applyForcedMode(this);
+    }
+
     void resetObject() {
         PlayerObject::resetObject();
-        applyPlatformerMode(this);
-        applyClassicMode(this);
+        applyForcedMode(this);
     }
 };
 
@@ -517,14 +556,9 @@ class $modify(AntikaPlayLayer, PlayLayer) {
         s_cameraSettled = false;
         applyForceGameMode(this);
 
-        if (allModesPlatformerOn()) {
-            applyPlatformerMode(m_player1);
-            if (m_player2) applyPlatformerMode(m_player2);
-        }
-
-        if (forceGamemodeOn()) {
-            applyClassicMode(m_player1);
-            if (m_player2) applyClassicMode(m_player2);
+        if (allModesPlatformerOn() || forceGamemodeOn()) {
+            applyForcedMode(m_player1);
+            if (m_player2) applyForcedMode(m_player2);
         }
 
         if (negativeOn()) {

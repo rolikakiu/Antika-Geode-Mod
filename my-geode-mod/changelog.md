@@ -1,6 +1,6 @@
 # antika geode mod — Changelog
 
-- **1.6.8** — Version bump; no changes yet.
+- **1.6.8** — Fix: the forced game modes (All Modes in Platformer and Force Game Mode) no longer lose to the level's portals — the chosen mode is re-applied every frame, so ship/ball/UFO/wave/robot/spider/swing portals in the level can't switch you out of it. Picking Cube now also forces you back to the cube when a portal tries to change your mode.
 - **1.6.7** — Add Don't Move Camera: the camera stays on the level's starting view instead of following the player, so it never pans, zooms or reacts to the level's camera triggers. Also add Force Game Mode: play classic levels as Ship, Ball, UFO, Wave, Robot, Spider or Swing (pick it in the mod settings) instead of only Cube, mirroring All Modes in Platformer.
 - **1.6.6** — Add Force Classic: play platformer levels in classic mode (it wins over Force Platformer when both are on). Force Platformer and Force Classic are now re-applied after dying and respawning, which also makes Force Platformer survive a respawn in classic levels.
 - **1.6.5** — Add a keybind that replays the story ending dialog at any time: press **Ctrl+Shift+K** (works everywhere, and can be rebound in Geode's keybind settings; press it again to close the dialog). Also fixes the main menu: the mod was replacing `MenuLayer::update` without calling the original, so the menu's own update logic never ran.
