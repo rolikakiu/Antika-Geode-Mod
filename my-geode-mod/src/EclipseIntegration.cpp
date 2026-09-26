@@ -19,6 +19,8 @@ static void eclipseSyncAll() {
     eclipse::config::set("antika-force-classic", mod->getSettingValue<bool>("force-classic"));
     eclipse::config::set("antika-all-modes-platformer", mod->getSettingValue<bool>("all-modes-platformer"));
     eclipse::config::set("antika-make-3d", mod->getSettingValue<bool>("make-3d"));
+    eclipse::config::set("antika-no-camera-move", mod->getSettingValue<bool>("no-camera-move"));
+    eclipse::config::set("antika-force-gamemode", mod->getSettingValue<bool>("force-gamemode"));
 }
 
 $on_mod(Loaded) {
@@ -34,7 +36,9 @@ $on_mod(Loaded) {
                 || mod->getSettingValue<bool>("accurate")
                 || mod->getSettingValue<bool>("truehit")
                 || mod->getSettingValue<bool>("noclip")
-                || mod->getSettingValue<bool>("make-3d");
+                || mod->getSettingValue<bool>("make-3d")
+                || mod->getSettingValue<bool>("no-camera-move")
+                || mod->getSettingValue<bool>("force-gamemode");
         });
 
         auto tab = eclipse::MenuTab::find("antika");
@@ -83,6 +87,14 @@ $on_mod(Loaded) {
             Mod::get()->setSettingValue("make-3d", value);
         }).setDescription("Apply the famous 3D shader look to every level (Radial Blur -0.50 size / 500000 intensity / ref channel 1234, Bulge 0.25, B5 to Max).");
 
+        tab.addToggle("antika-no-camera-move", "Don't Move Camera", [](bool value) {
+            Mod::get()->setSettingValue("no-camera-move", value);
+        }).setDescription("Freeze the camera on the level's starting view instead of following the player.");
+
+        tab.addToggle("antika-force-gamemode", "Force Game Mode", [](bool value) {
+            Mod::get()->setSettingValue("force-gamemode", value);
+        }).setDescription("Play classic levels as any game mode instead of only Cube. Pick the mode in the mod settings.");
+
         eclipseSyncAll();
 
         geode::listenForSettingChanges<bool>("disable", [](bool value) {
@@ -117,6 +129,12 @@ $on_mod(Loaded) {
         });
         geode::listenForSettingChanges<bool>("make-3d", [](bool value) {
             eclipse::config::set("antika-make-3d", value);
+        });
+        geode::listenForSettingChanges<bool>("no-camera-move", [](bool value) {
+            eclipse::config::set("antika-no-camera-move", value);
+        });
+        geode::listenForSettingChanges<bool>("force-gamemode", [](bool value) {
+            eclipse::config::set("antika-force-gamemode", value);
         });
     });
 }

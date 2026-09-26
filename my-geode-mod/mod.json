@@ -6,9 +6,9 @@
     },
     "id": "rolikakiu.multimode",
     "name": "antika geode mod",
-    "version": "1.6.6",
+    "version": "1.6.7",
     "developer": "rolikakiu",
-    "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer, force classic and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
+    "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer, force classic, don't move camera, force game mode in classic and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
     "repository": "https://github.com/rolikakiu/Antika-Geode-Mod",
     "tags": ["gameplay", "enhancement"],
     "dependencies": {
@@ -113,6 +113,12 @@
             "description": "Apply the famous 3D shader look to every level: Radial Blur (size -0.50, intensity 500000, ref channel 1234, empty-only), Bulge of 0.25 and the shader covering layers B5 to Max.",
             "default": false
         },
+        "no-camera-move": {
+            "type": "bool",
+            "name": "Don't Move Camera",
+            "description": "Freeze the camera on the level's starting view instead of following the player: it never pans, zooms or reacts to the level's camera triggers.",
+            "default": false
+        },
         "all-modes-platformer": {
             "type": "bool",
             "name": "All Modes in Platformer",
@@ -127,6 +133,22 @@
             "options": ["Cube", "Ship", "Ball", "UFO", "Wave", "Robot", "Spider", "Swing"],
             "depends_on": {
                 "all-modes-platformer": true
+            }
+        },
+        "force-gamemode": {
+            "type": "bool",
+            "name": "Force Game Mode",
+            "description": "Play classic levels as any game mode (Ship, Ball, UFO, Wave, Robot, Spider or Swing) instead of only Cube. Pick the mode below.",
+            "default": false
+        },
+        "gamemode": {
+            "type": "string",
+            "name": "Classic Game Mode",
+            "description": "Which mode to play as in classic levels when Force Game Mode is on.",
+            "default": "Cube",
+            "options": ["Cube", "Ship", "Ball", "UFO", "Wave", "Robot", "Spider", "Swing"],
+            "depends_on": {
+                "force-gamemode": true
             }
         }
     }

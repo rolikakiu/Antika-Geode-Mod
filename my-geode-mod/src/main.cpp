@@ -21,9 +21,10 @@ static bool forcePlatformerOn() { return Mod::get()->getSettingValue<bool>("forc
 static bool forceClassicOn() { return Mod::get()->getSettingValue<bool>("force-classic"); }
 static bool allModesPlatformerOn() { return Mod::get()->getSettingValue<bool>("all-modes-platformer"); }
 static bool make3dOn() { return Mod::get()->getSettingValue<bool>("make-3d"); }
+static bool noCameraMoveOn() { return Mod::get()->getSettingValue<bool>("no-camera-move"); }
+static bool forceGamemodeOn() { return Mod::get()->getSettingValue<bool>("force-gamemode"); }
 
-static GameObjectType chosenPlatformerMode() {
-    auto s = Mod::get()->getSettingValue<std::string>("platformer-mode");
+static GameObjectType modeFromName(std::string const& s) {
     if (s == "Ship") return GameObjectType::ShipPortal;
     if (s == "Ball") return GameObjectType::BallPortal;
     if (s == "UFO") return GameObjectType::UfoPortal;
@@ -34,9 +35,16 @@ static GameObjectType chosenPlatformerMode() {
     return GameObjectType::CubePortal;
 }
 
-static void applyPlatformerMode(PlayerObject* player) {
-    if (!player || !allModesPlatformerOn() || !player->m_isPlatformer) return;
-    switch (chosenPlatformerMode()) {
+static GameObjectType chosenPlatformerMode() {
+    return modeFromName(Mod::get()->getSettingValue<std::string>("platformer-mode"));
+}
+
+static GameObjectType chosenClassicMode() {
+    return modeFromName(Mod::get()->getSettingValue<std::string>("gamemode"));
+}
+
+static void toggleChosenMode(PlayerObject* player, GameObjectType mode) {
+    switch (mode) {
         case GameObjectType::ShipPortal: player->toggleFlyMode(true, true); break;
         case GameObjectType::BallPortal: player->toggleRollMode(true, true); break;
         case GameObjectType::UfoPortal: player->toggleBirdMode(true, true); break;
@@ -46,6 +54,16 @@ static void applyPlatformerMode(PlayerObject* player) {
         case GameObjectType::SwingPortal: player->toggleSwingMode(true, true); break;
         default: break;
     }
+}
+
+static void applyPlatformerMode(PlayerObject* player) {
+    if (!player || !allModesPlatformerOn() || !player->m_isPlatformer) return;
+    toggleChosenMode(player, chosenPlatformerMode());
+}
+
+static void applyClassicMode(PlayerObject* player) {
+    if (!player || !forceGamemodeOn() || player->m_isPlatformer) return;
+    toggleChosenMode(player, chosenClassicMode());
 }
 
 static void applyForceGameMode(PlayLayer* layer) {
@@ -83,6 +101,7 @@ class $modify(AntikaPlayerObject, PlayerObject) {
     void resetObject() {
         PlayerObject::resetObject();
         applyPlatformerMode(this);
+        applyClassicMode(this);
     }
 };
 
@@ -273,6 +292,25 @@ class $modify(AntikaCollisionLayer, GJBaseGameLayer) {
             if (accurateIsSaw(g)) hitDrawSaw(m_debugDrawNode, g);
             else hitDrawSpike(m_debugDrawNode, g);
         }
+    }
+};
+
+/* ---------------- Don't move camera ---------------- */
+static bool s_cameraSettled = false;
+
+class $modify(AntikaCameraLayer, GJBaseGameLayer) {
+    void updateCamera(float dt) {
+        if (!noCameraMoveOn()) {
+            s_cameraSettled = false;
+            GJBaseGameLayer::updateCamera(dt);
+            return;
+        }
+
+        // let the very first update settle the camera on the level's start
+        // position/zoom, then never touch it again
+        if (s_cameraSettled) return;
+        GJBaseGameLayer::updateCamera(dt);
+        s_cameraSettled = true;
     }
 };
 
@@ -476,11 +514,17 @@ class $modify(AntikaPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
+        s_cameraSettled = false;
         applyForceGameMode(this);
 
         if (allModesPlatformerOn()) {
             applyPlatformerMode(m_player1);
             if (m_player2) applyPlatformerMode(m_player2);
+        }
+
+        if (forceGamemodeOn()) {
+            applyClassicMode(m_player1);
+            if (m_player2) applyClassicMode(m_player2);
         }
 
         if (negativeOn()) {
