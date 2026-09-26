@@ -6,7 +6,7 @@
     },
     "id": "rolikakiu.multimode",
     "name": "antika geode mod",
-    "version": "1.6.7",
+    "version": "1.6.8",
     "developer": "rolikakiu",
     "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer, force classic, don't move camera, force game mode in classic and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
     "repository": "https://github.com/rolikakiu/Antika-Geode-Mod",
