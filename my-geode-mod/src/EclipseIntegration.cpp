@@ -16,6 +16,7 @@ static void eclipseSyncAll() {
     eclipse::config::set("antika-noclip", mod->getSettingValue<bool>("noclip"));
     eclipse::config::set("antika-force-ice", mod->getSettingValue<bool>("force-ice"));
     eclipse::config::set("antika-force-platformer", mod->getSettingValue<bool>("force-platformer"));
+    eclipse::config::set("antika-force-classic", mod->getSettingValue<bool>("force-classic"));
     eclipse::config::set("antika-all-modes-platformer", mod->getSettingValue<bool>("all-modes-platformer"));
     eclipse::config::set("antika-make-3d", mod->getSettingValue<bool>("make-3d"));
 }
@@ -70,6 +71,10 @@ $on_mod(Loaded) {
             Mod::get()->setSettingValue("force-platformer", value);
         }).setDescription("Play classic levels in platformer mode.");
 
+        tab.addToggle("antika-force-classic", "Force Classic", [](bool value) {
+            Mod::get()->setSettingValue("force-classic", value);
+        }).setDescription("Play platformer levels in classic mode. Overrides Force Platformer when both are on.");
+
         tab.addToggle("antika-all-modes-platformer", "All Modes in Platformer", [](bool value) {
             Mod::get()->setSettingValue("all-modes-platformer", value);
         }).setDescription("Play platformer levels as any game mode instead of only Cube. Pick the mode in the mod settings.");
@@ -103,6 +108,9 @@ $on_mod(Loaded) {
         });
         geode::listenForSettingChanges<bool>("force-platformer", [](bool value) {
             eclipse::config::set("antika-force-platformer", value);
+        });
+        geode::listenForSettingChanges<bool>("force-classic", [](bool value) {
+            eclipse::config::set("antika-force-classic", value);
         });
         geode::listenForSettingChanges<bool>("all-modes-platformer", [](bool value) {
             eclipse::config::set("antika-all-modes-platformer", value);

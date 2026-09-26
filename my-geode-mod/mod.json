@@ -6,9 +6,9 @@
     },
     "id": "rolikakiu.multimode",
     "name": "antika geode mod",
-    "version": "1.6.5",
+    "version": "1.6.6",
     "developer": "rolikakiu",
-    "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
+    "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer, force classic and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
     "repository": "https://github.com/rolikakiu/Antika-Geode-Mod",
     "tags": ["gameplay", "enhancement"],
     "dependencies": {
@@ -99,6 +99,12 @@
             "type": "bool",
             "name": "Force Platformer",
             "description": "Play classic levels in platformer mode.",
+            "default": false
+        },
+        "force-classic": {
+            "type": "bool",
+            "name": "Force Classic",
+            "description": "Play platformer levels in classic mode. Overrides Force Platformer when both are on.",
             "default": false
         },
         "make-3d": {

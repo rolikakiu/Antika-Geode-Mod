@@ -1,5 +1,7 @@
 # antika geode mod — Changelog
 
+- **1.6.6** — Add Force Classic: play platformer levels in classic mode (it wins over Force Platformer when both are on). Force Platformer and Force Classic are now re-applied after dying and respawning, which also makes Force Platformer survive a respawn in classic levels.
+
 - **1.6.5** — Add a keybind that replays the story ending dialog at any time: press **Ctrl+Shift+K** (works everywhere, and can be rebound in Geode's keybind settings; press it again to close the dialog). Also fixes the main menu: the mod was replacing `MenuLayer::update` without calling the original, so the menu's own update logic never ran.
 - **1.6.4** — Combined release: the single .geode package now ships every platform together (Windows `rolikakiu.multimode.dll`, Android 32-bit `rolikakiu.multimode.android32.so`, Android 64-bit `rolikakiu.multimode.android64.so`), so one download installs on all of them. No gameplay or bugfix changes since 1.6.3.
 - **1.6.3** — Add Android support: the mod now builds and runs on Android (2.2081) as well as Windows. Also: renamed the misleading "Disable" setting to "Story Mode", declared an incompatibility with other Negative Hitboxes mods, gave the mod's nodes prefixed IDs, and fixed the Accurate Hitboxes debug overlay not lining up with the real hitbox on rotated spikes.

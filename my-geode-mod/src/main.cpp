@@ -18,6 +18,7 @@ static bool negativeOn() { return Mod::get()->getSettingValue<bool>("negative");
 static bool noclipOn() { return Mod::get()->getSettingValue<bool>("noclip"); }
 static bool forceIceOn() { return Mod::get()->getSettingValue<bool>("force-ice"); }
 static bool forcePlatformerOn() { return Mod::get()->getSettingValue<bool>("force-platformer"); }
+static bool forceClassicOn() { return Mod::get()->getSettingValue<bool>("force-classic"); }
 static bool allModesPlatformerOn() { return Mod::get()->getSettingValue<bool>("all-modes-platformer"); }
 static bool make3dOn() { return Mod::get()->getSettingValue<bool>("make-3d"); }
 
@@ -45,6 +46,27 @@ static void applyPlatformerMode(PlayerObject* player) {
         case GameObjectType::SwingPortal: player->toggleSwingMode(true, true); break;
         default: break;
     }
+}
+
+static void applyForceGameMode(PlayLayer* layer) {
+    if (forceClassicOn()) {
+        if (!layer->m_isPlatformer) return;
+        layer->m_isPlatformer = false;
+        if (layer->m_levelSettings) layer->m_levelSettings->m_platformerMode = false;
+        if (layer->m_player1) layer->m_player1->togglePlatformerMode(false);
+        if (layer->m_player2) layer->m_player2->togglePlatformerMode(false);
+        if (layer->m_uiLayer) layer->m_uiLayer->togglePlatformerMode(false);
+        if (layer->m_groundLayer) layer->m_groundLayer->setVisible(false);
+        return;
+    }
+
+    if (!forcePlatformerOn() || layer->m_isPlatformer) return;
+    layer->m_isPlatformer = true;
+    if (layer->m_levelSettings) layer->m_levelSettings->m_platformerMode = true;
+    if (layer->m_player1) layer->m_player1->togglePlatformerMode(true);
+    if (layer->m_player2) layer->m_player2->togglePlatformerMode(true);
+    if (layer->m_uiLayer) layer->m_uiLayer->togglePlatformerMode(true);
+    if (layer->m_groundLayer) layer->m_groundLayer->setVisible(true);
 }
 
 class $modify(AntikaPlayerObject, PlayerObject) {
@@ -445,6 +467,7 @@ class $modify(AntikaPlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
+        applyForceGameMode(this);
         if (make3dOn()) {
             applyMakeEverything3D(this);
         }
@@ -453,13 +476,7 @@ class $modify(AntikaPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        if (forcePlatformerOn() && !m_isPlatformer) {
-            m_isPlatformer = true;
-            if (m_levelSettings) m_levelSettings->m_platformerMode = true;
-            if (m_player1) m_player1->togglePlatformerMode(true);
-            if (m_player2) m_player2->togglePlatformerMode(true);
-            if (m_uiLayer) m_uiLayer->togglePlatformerMode(true);
-        }
+        applyForceGameMode(this);
 
         if (allModesPlatformerOn()) {
             applyPlatformerMode(m_player1);
