@@ -1,9 +1,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/EditorUI.hpp>
-#include <Geode/modify/EventLinkTrigger.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/PlayLayer.hpp>
-#include <Geode/modify/RingObject.hpp>
 #include <cocos2d.h>
 #include <cmath>
 #include <vector>
@@ -12,13 +10,23 @@ using namespace geode::prelude;
 
 /* The Antika orb throws the player up to the moon, a fixed distance above
    wherever the orb was touched, and the return orb drops them back down to
-   that same spot. GD has no space objects, so both orbs are vanilla objects
-   the mod restyles: the "Ring" object (and the teleport portal built on it)
-   is the orb going up, the "Event Link" object is the orb coming back.
+   that same spot.
 
-   Everything the orb is made of is drawn with CCDrawNode. Nothing is looked
-   up out of the game's sprite cache by name, because asking GD for a frame
-   that does not exist crashes the game. */
+   The orbs are their own objects now. GD's level format only stores object
+   IDs and has no free slots for brand-new objects, so each Antika orb rides
+   on a vanilla object that is invisible and does nothing by itself: the
+   "Thin Invisible Outline" (Object 1340) is the way-up orb and the "Thick
+   Invisible Outline" (Object 1343) is the way-back orb. Neither has a
+   visible sprite, a hitbox or any gameplay, so reusing them changes nothing
+   about any existing level. No vanilla orb, ring, or trigger is touched:
+   Ring, Event Link, and the teleport portal are all back to normal.
+
+   Everything the orb is made of is drawn with CCDrawNode, only while a level
+   is actually running. In the editor a GameObject lives inside a sprite
+   batch node, and the editor reorders that batch node every frame by walking
+   each object's children as if they were all sprites — so the mod never
+   attaches anything to a GameObject you are editing, and placing an Antika
+   orb can never crash the game again. */
 
 namespace {
 
@@ -30,18 +38,21 @@ constexpr float kFloorHalfWidth = 2600.f;
 constexpr float kCeilingHeight = 1400.f;
 constexpr float kUnderFloor = 700.f;
 
-// the orbs are found by their tag: a tag is a plain int on the node that
-// nothing else in GD or in the editor's mods touches, so it cannot be confused
-// for a sprite by the editor's sprite batching
-constexpr int kOrbTagUp = 0x0A17;
-constexpr int kOrbTagBack = 0x0A18;
+// the two invisible vanilla decorations the Antika orbs are saved as
+constexpr int kOrbUpCarrier = 1340;   // Thin Invisible Outline
+constexpr int kOrbBackCarrier = 1343; // Thick Invisible Outline
 
-bool isUpOrbNode(cocos2d::CCNode* node) {
-    return node && node->getTag() == kOrbTagUp;
+// the in-game orb art is added as a tagged child exactly once
+constexpr int kOrbArtTag = 0x0A19;
+
+bool isOrbObject(cocos2d::CCNode* node) {
+    auto obj = typeinfo_cast<GameObject*>(node);
+    return obj && (obj->m_objectID == kOrbUpCarrier || obj->m_objectID == kOrbBackCarrier);
 }
 
-bool isBackOrbNode(cocos2d::CCNode* node) {
-    return node && node->getTag() == kOrbTagBack;
+bool isBackOrbObject(cocos2d::CCNode* node) {
+    auto obj = typeinfo_cast<GameObject*>(node);
+    return obj && obj->m_objectID == kOrbBackCarrier;
 }
 
 /* ---------------- orb art ---------------- */
@@ -52,14 +63,12 @@ cocos2d::ccColor4F shade(int r, int g, int b, float a) {
 
 // a glowing orb: soft halo, bright core, hard rim, one highlight
 //
-// The editor must never see this. In the editor a GameObject lives inside a
-// CCSpriteBatchNode, and LevelEditorLayer::updateVisibility() calls
-// addMainSpriteToParent(true) on every object every frame, which reorders that
-// batch node and walks the object's children as if they were sprites. A
-// CCDrawNode child there makes cocos2d read a sprite out of it and take the
-// game down, so orbs are dressed in the game only.
-void dressOrb(GameObject* object, bool back) {
-    if (object->m_editorEnabled) return;
+// This runs only from the in-game tick below, never in the editor, so the
+// child it draws can never be walked like a sprite by the editor's batch
+// node. The invisible carrier still gets a small real hitbox so it can be
+// selected and moved while editing.
+void ensureOrbArt(GameObject* object, bool back) {
+    if (!object || object->getChildByTag(kOrbArtTag)) return;
 
     int r = back ? 96 : 178;
     int g = back ? 216 : 120;
@@ -73,10 +82,10 @@ void dressOrb(GameObject* object, bool back) {
     art->drawCircle(cocos2d::CCPoint(0, 0), 15.f, shade(r, g, b, 0.f), 2.5f, shade(255, 255, 255, 0.80f), 32);
     art->drawDot(cocos2d::CCPoint(-4.5f, 4.5f), 4.5f, shade(255, 255, 255, 0.85f));
     art->drawDot(cocos2d::CCPoint(-5.5f, 5.5f), 2.f, shade(255, 255, 255, 0.95f));
+    art->setTag(kOrbArtTag);
     object->addChild(art, 10);
 
-    // the orb's own tag is what the mod recognises it by later
-    object->setTag(back ? kOrbTagBack : kOrbTagUp);
+    // a real box, so the invisible object can be selected in the editor
     object->m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
 }
 
@@ -131,22 +140,18 @@ void dressMoon(cocos2d::CCNode* node, cocos2d::CCPoint surface) {
 
 /* ---------------- finding the orbs ---------------- */
 
-// The orbs are found by walking the running scene for the tags above instead
-// of keeping raw pointers to them: a pointer kept across frames can outlive
-// the object it points at, and reading it takes the game down with it.
+// The orbs are found by walking the running scene for the carrier IDs above
+// instead of keeping raw pointers to them: a pointer kept across frames can
+// outlive the object it points at, and reading it takes the game down.
 struct OrbRef {
-    cocos2d::CCNode* node = nullptr;
+    GameObject* object = nullptr;
     bool back = false;
 };
 
 void collectOrbs(cocos2d::CCNode* node, std::vector<OrbRef>& out) {
     if (!node) return;
-    if (isUpOrbNode(node)) {
-        out.push_back({ node, false });
-        return;
-    }
-    if (isBackOrbNode(node)) {
-        out.push_back({ node, true });
+    if (typeinfo_cast<GameObject*>(node) && isOrbObject(node)) {
+        out.push_back({ static_cast<GameObject*>(node), isBackOrbObject(node) });
         return;
     }
     auto children = node->getChildren();
@@ -243,7 +248,9 @@ void orbTick(float dt) {
         if (player->m_isDead) return;
 
         for (auto& orb : orbs) {
-            auto pos = orb.node->getPosition();
+            ensureOrbArt(orb.object, orb.back);
+
+            auto pos = orb.object->getPosition();
             float dx = player->m_position.x - pos.x;
             float dy = player->m_position.y - pos.y;
             if (std::hypot(dx, dy) > kTouchRadius) continue;
@@ -301,27 +308,99 @@ void startMoon(PlayLayer* layer) {
     s_moon.night = night;
 }
 
+/* ---------------- the editor ---------------- */
+
+// the editor's build tabs are rebuilt whenever one is opened, so the mod
+// re-adds its own entries to the Orbs tab each time — always starting from
+// the buttons the game made, so nothing is ever lost or duplicated
+class $modify(AntikaEditorTabs, EditorUI) {
+    void onSelectBuildTab(cocos2d::CCObject* sender) {
+        EditorUI::onSelectBuildTab(sender);
+        injectOrbButtons();
+    }
+
+    // give a freshly placed Antika orb a real hitbox box, so even though the
+    // object is invisible it can be selected and moved in the editor
+    GameObject* createObject(int objectID, cocos2d::CCPoint position) {
+        auto obj = EditorUI::createObject(objectID, position);
+        if (obj && (obj->m_objectID == kOrbUpCarrier || obj->m_objectID == kOrbBackCarrier)) {
+            obj->m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
+        }
+        return obj;
+    }
+
+    void injectOrbButtons() {
+        if (!m_createButtonBars) return;
+        for (int i = 0; i < m_createButtonBars->count(); ++i) {
+            auto bar = typeinfo_cast<EditButtonBar*>(m_createButtonBars->objectAtIndex(i));
+            if (!bar || !isOrbTab(bar)) continue;
+            addOrbButton(bar);
+        }
+    }
+
+    static bool isVanillaOrbId(int id) {
+        switch (id) {
+            case 36: case 84: case 141: case 1022: case 1330: case 1333:
+            case 1594: case 1704: case 1886: case 1887: case 1888:
+            case 3004: case 3027:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    static bool isOrbTab(EditButtonBar* bar) {
+        // the Orbs tab is index 10 in the editor, but also recognise it by
+        // its contents so it works even if the index ever differs
+        if (bar->m_tabIndex == 10) return true;
+        auto children = bar->getChildren();
+        if (!children) return false;
+        for (int i = 0; i < children->count(); ++i) {
+            auto item = typeinfo_cast<CreateMenuItem*>(children->objectAtIndex(i));
+            if (item && isVanillaOrbId(item->m_objectID)) return true;
+        }
+        return false;
+    }
+
+    void addOrbButton(EditButtonBar* bar) {
+        auto children = bar->getChildren();
+        if (!children) return;
+
+        auto items = cocos2d::CCArray::create();
+        for (int i = 0; i < children->count(); ++i) {
+            auto item = typeinfo_cast<CreateMenuItem*>(children->objectAtIndex(i));
+            // only rebuild a bar that is nothing but buttons
+            if (!item) return;
+            items->addObject(item);
+        }
+
+        if (auto up = getCreateBtn(kOrbUpCarrier, 4)) items->addObject(up);
+        if (auto back = getCreateBtn(kOrbBackCarrier, 4)) items->addObject(back);
+
+        int rows = GameManager::get()->getIntGameVariableDefault("0049", 4);
+        int cols = GameManager::get()->getIntGameVariableDefault("0050", 4);
+        if (rows <= 0 || rows > 20) rows = 4;
+        if (cols <= 0 || cols > 20) cols = 4;
+
+        bar->loadFromItems(items, rows, cols, true);
+    }
+};
+
+// name the orbs in the editor's info bar, so the entry in the Orbs tab reads
+// as an Antika orb rather than as the vanilla object behind it
+class $modify(AntikaEditorInfo, EditorUI) {
+    void updateObjectInfoLabel() {
+        EditorUI::updateObjectInfoLabel();
+        if (!m_objectInfoLabel || !m_selectedObject) return;
+        if (m_selectedObject->m_objectID == kOrbUpCarrier) {
+            m_objectInfoLabel->setString("Antika Orb");
+        } else if (m_selectedObject->m_objectID == kOrbBackCarrier) {
+            m_objectInfoLabel->setString("Antika Return Orb");
+        }
+    }
+};
+
 } // namespace
-
-// the vanilla "Ring" object (and the teleport portal built on top of it),
-// now the orb that throws the player up to the moon
-class $modify(AntikaMoonOrb, RingObject) {
-    static RingObject* create(char const* frame) {
-        auto orb = RingObject::create(frame);
-        if (!orb) return nullptr;
-        dressOrb(orb, false);
-        return orb;
-    }
-};
-
-// the vanilla "Event Link" object, now the orb that drops the player back down
-class $modify(AntikaBackOrb, EventLinkTrigger) {
-    bool init() {
-        if (!EventLinkTrigger::init()) return false;
-        dressOrb(this, true);
-        return true;
-    }
-};
 
 class $modify(AntikaMoonLevelHook, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
@@ -343,19 +422,5 @@ class $modify(AntikaMoonRespawnHook, PlayerObject) {
         PlayerObject::resetObject();
         // respawning means the trip to the moon is over
         s_moon.hasBack = false;
-    }
-};
-
-// name the orbs in the editor's info bar, so the entry in the Orbs tab reads
-// as an Antika orb rather than as the vanilla object behind it
-class $modify(AntikaEditorInfo, EditorUI) {
-    void updateObjectInfoLabel() {
-        EditorUI::updateObjectInfoLabel();
-        if (!m_objectInfoLabel || !m_selectedObject) return;
-        if (isUpOrbNode(m_selectedObject)) {
-            m_objectInfoLabel->setString("Antika Orb");
-        } else if (isBackOrbNode(m_selectedObject)) {
-            m_objectInfoLabel->setString("Antika Return Orb");
-        }
     }
 };
