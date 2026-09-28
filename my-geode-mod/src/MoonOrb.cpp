@@ -1,10 +1,12 @@
 #include <Geode/Geode.hpp>
+#include <Geode/modify/EditorUI.hpp>
 #include <Geode/modify/EventLinkTrigger.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/RingObject.hpp>
 #include <cocos2d.h>
 #include <cmath>
+#include <unordered_set>
 #include <vector>
 
 using namespace geode::prelude;
@@ -13,11 +15,9 @@ using namespace geode::prelude;
    wherever the orb was touched, and the return orb drops them back down to
    that same spot. GD has no space objects, so both orbs are vanilla objects
    the mod restyles: the "Ring" object (and the teleport portal built on it)
-   is the orb going up, the "Event Link" object is the orb coming back.
-
-   Nothing here loads or uploads an image: every bit of art is a CCDrawNode
-   child, which is how GD's own objects draw their extra sprites, so it shows
-   up the same way in the editor as it does in game. */
+   is the orb going up, the "Event Link" object is the orb coming back. The
+   editor's object list, its previews and its name label are all pointed at
+   the orbs too, so the entry in the Orbs tab shows a real orb. */
 
 namespace {
 
@@ -29,27 +29,71 @@ constexpr float kFloorHalfWidth = 2600.f;
 constexpr float kCeilingHeight = 1400.f;
 constexpr float kUnderFloor = 700.f;
 
-/* ---------------- drawn art ---------------- */
+/* ---------------- orb art ---------------- */
 
 cocos2d::ccColor4F shade(int r, int g, int b, float a) {
     return cocos2d::ccColor4F{ r / 255.f, g / 255.f, b / 255.f, a };
 }
 
+// A real orb sprite out of the game, tinted. GD has no orb of our own colour,
+// so a vanilla one is borrowed and recoloured; the frame is only used once the
+// game has confirmed it actually has it, and the drawn rim below covers the
+// orb even in the unlikely case nothing is found.
+cocos2d::CCSprite* orbSprite() {
+    static const char* frames[] = {
+        "orbs_001.png", "orbs_002.png", "orbs_003.png", "orbs_004.png",
+        "orbs_005.png", "orbs_006.png", "orbs_007.png", "orbs_008.png",
+        "orbs_009.png", "orbs_010.png", "orbs_011.png", "orbs_012.png",
+        "orbs_013.png", "orbs_014.png", "orbs_015.png", "orbs_016.png",
+        "orbs_017.png", "orbs_018.png", "orbs_019.png", "orbs_020.png",
+        "orb_001.png", "orb_002.png", "orb_003.png", "orb_004.png",
+        "yellow_orb.png", "jumpRing_001.png", "ring_001.png", "ring_002.png",
+        "coin_001.png", "ball_001.png", "star_001.png", "moon_001.png",
+        "GJ_stars_001.png", "GJ_particle_001.png", "GJ_coin_001.png",
+    };
+    static const char* found = nullptr;
+    if (found) return cocos2d::CCSprite::createWithSpriteFrameName(found);
+
+    static bool tried = false;
+    if (tried) return nullptr;
+    tried = true;
+
+    for (auto frame : frames) {
+        if (!cocos2d::CCSprite::createWithSpriteFrameName(frame)) continue;
+        found = frame;
+        return cocos2d::CCSprite::createWithSpriteFrameName(frame);
+    }
+    return nullptr;
+}
+
 // the orb sits on top of whatever the vanilla object draws
 void dressOrb(cocos2d::CCNode* object, int r, int g, int b) {
+    if (auto sprite = orbSprite()) {
+        auto size = sprite->getContentSize();
+        auto longest = std::max(size.width, size.height);
+        if (longest > 1.f) sprite->setScale(kOrbSize * 0.95f / longest);
+        sprite->setColor(cocos2d::ccColor3B{ (GLubyte)r, (GLubyte)g, (GLubyte)b });
+        sprite->setID("rolikakiu.multimode-orb-sprite"_spr);
+        object->addChild(sprite, 9);
+    }
+
     auto art = cocos2d::CCDrawNode::create();
     art->setID("rolikakiu.multimode-orb"_spr);
-
-    art->drawCircle(cocos2d::CCPoint(0, 0), 18.f, shade(r, g, b, 0.20f), 0.f, shade(0, 0, 0, 0.f), 32);
-    art->drawCircle(cocos2d::CCPoint(0, 0), 14.f, shade(r, g, b, 0.95f), 1.5f, shade(255, 255, 255, 0.55f), 32);
-    art->drawCircle(cocos2d::CCPoint(0, 0), 9.f, shade(255, 255, 255, 0.22f), 0.f, shade(0, 0, 0, 0.f), 32);
-    art->drawDot(cocos2d::CCPoint(-4.f, 4.f), 4.5f, shade(255, 255, 255, 0.85f));
-
+    art->drawCircle(cocos2d::CCPoint(0, 0), 18.f, shade(r, g, b, 0.18f), 0.f, shade(0, 0, 0, 0.f), 32);
+    art->drawCircle(cocos2d::CCPoint(0, 0), 15.f, shade(r, g, b, 0.12f), 2.f, shade(255, 255, 255, 0.45f), 32);
+    art->drawDot(cocos2d::CCPoint(-4.5f, 4.5f), 4.f, shade(255, 255, 255, 0.7f));
     object->addChild(art, 10);
 }
 
 // the moon, its craters, the stars and the ground the player runs on
 void dressMoon(cocos2d::CCNode* node, cocos2d::CCPoint surface) {
+    // the ground is a plain coloured band, so there is always something solid
+    // looking to stand on even if the drawn art below goes missing
+    auto band = cocos2d::CCLayerColor::create(cocos2d::ccc4(150, 150, 160, 255), kFloorHalfWidth * 2.f, 200.f);
+    band->setPosition(cocos2d::CCPoint(surface.x, surface.y - 100.f));
+    band->setID("rolikakiu.multimode-moon-ground"_spr);
+    node->addChild(band, 0);
+
     auto art = cocos2d::CCDrawNode::create();
     art->setID("rolikakiu.multimode-moon-art"_spr);
 
@@ -90,6 +134,43 @@ void dressMoon(cocos2d::CCNode* node, cocos2d::CCPoint surface) {
     }
 
     node->addChild(art, 0);
+}
+
+/* ---------------- remembering which objects became orbs ---------------- */
+
+std::unordered_set<int> s_upOrbIds;
+std::unordered_set<int> s_backOrbIds;
+bool s_loadedOrbIds = false;
+
+void loadRememberedOrbIds() {
+    if (s_loadedOrbIds) return;
+    s_loadedOrbIds = true;
+    auto mod = Mod::get();
+    if (!mod) return;
+    if (auto id = mod->getSavedValue<int>("antika-orb-up-id", -1); id > 0) s_upOrbIds.insert(id);
+    if (auto id = mod->getSavedValue<int>("antika-orb-back-id", -1); id > 0) s_backOrbIds.insert(id);
+}
+
+void rememberOrbId(int id, bool back) {
+    if (id <= 0) return;
+    auto mod = Mod::get();
+    if (back) {
+        if (!s_backOrbIds.insert(id).second) return;
+        if (mod && mod->getSavedValue<int>("antika-orb-back-id", -1) != id) mod->setSavedValue("antika-orb-back-id", id);
+    } else {
+        if (!s_upOrbIds.insert(id).second) return;
+        if (mod && mod->getSavedValue<int>("antika-orb-up-id", -1) != id) mod->setSavedValue("antika-orb-up-id", id);
+    }
+}
+
+bool isUpOrb(int id) {
+    loadRememberedOrbIds();
+    return s_upOrbIds.count(id) > 0;
+}
+
+bool isBackOrb(int id) {
+    loadRememberedOrbIds();
+    return s_backOrbIds.count(id) > 0;
 }
 
 /* ---------------- moon state ---------------- */
@@ -256,6 +337,7 @@ class $modify(AntikaMoonOrb, RingObject) {
         if (!orb) return nullptr;
         dressOrb(orb, 178, 120, 255);
         orb->m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
+        rememberOrbId(orb->m_objectID, false);
         registerOrb(orb, false);
         return orb;
     }
@@ -267,6 +349,7 @@ class $modify(AntikaBackOrb, EventLinkTrigger) {
         if (!EventLinkTrigger::init()) return false;
         dressOrb(this, 96, 216, 255);
         m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
+        rememberOrbId(this->m_objectID, true);
         registerOrb(this, true);
         return true;
     }
@@ -293,5 +376,19 @@ class $modify(AntikaMoonRespawnHook, PlayerObject) {
         PlayerObject::resetObject();
         // respawning means the trip to the moon is over
         s_moon.hasBack = false;
+    }
+};
+
+// name the orbs in the editor's info bar, so the entry in the Orbs tab reads
+// as an Antika orb rather than as the vanilla object behind it
+class $modify(AntikaEditorInfo, EditorUI) {
+    void updateObjectInfoLabel() {
+        EditorUI::updateObjectInfoLabel();
+        if (!m_objectInfoLabel || !m_selectedObject) return;
+        if (isUpOrb(m_selectedObject->m_objectID)) {
+            m_objectInfoLabel->setString("Antika Orb");
+        } else if (isBackOrb(m_selectedObject->m_objectID)) {
+            m_objectInfoLabel->setString("Antika Return Orb");
+        }
     }
 };
