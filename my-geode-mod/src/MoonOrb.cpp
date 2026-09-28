@@ -5,7 +5,6 @@
 #include <Geode/modify/RingObject.hpp>
 #include <cocos2d.h>
 #include <cmath>
-#include <cstdlib>
 #include <vector>
 
 using namespace geode::prelude;
@@ -16,9 +15,9 @@ using namespace geode::prelude;
    the mod restyles: the "Ring" object (and the teleport portal built on it)
    is the orb going up, the "Event Link" object is the orb coming back.
 
-   Neither of those classes declares its own update, so the orbs are checked
-   from the player side instead: every level gets one node that ticks the orb
-   touches and holds anyone who sinks into the moon on its surface. */
+   Nothing here loads or uploads an image: every bit of art is a CCDrawNode
+   child, which is how GD's own objects draw their extra sprites, so it shows
+   up the same way in the editor as it does in game. */
 
 namespace {
 
@@ -30,112 +29,68 @@ constexpr float kFloorHalfWidth = 2600.f;
 constexpr float kCeilingHeight = 1400.f;
 constexpr float kUnderFloor = 700.f;
 
-/* ---------------- drawn sprites ---------------- */
-// the mod ships no images for the moon, every texture is filled in by hand
-struct Pixels {
-    int size;
-    unsigned char* data;
+/* ---------------- drawn art ---------------- */
 
-    explicit Pixels(int s) : size(s) {
-        data = static_cast<unsigned char*>(std::malloc(static_cast<size_t>(s) * s * 4));
-        for (int i = 0; i < s * s * 4; ++i) data[i] = 0;
-    }
-
-    void blend(int x, int y, int r, int g, int b, float a) {
-        if (a <= 0.f || x < 0 || y < 0 || x >= size || y >= size) return;
-        if (a > 1.f) a = 1.f;
-
-        auto i = (y * size + x) * 4;
-        float dstA = data[i + 3] / 255.f;
-        float outA = a + dstA * (1.f - a);
-        if (outA <= 0.f) return;
-
-        float keep = dstA * (1.f - a);
-        data[i] = static_cast<unsigned char>((r * a + data[i] * keep) / outA);
-        data[i + 1] = static_cast<unsigned char>((g * a + data[i + 1] * keep) / outA);
-        data[i + 2] = static_cast<unsigned char>((b * a + data[i + 2] * keep) / outA);
-        data[i + 3] = static_cast<unsigned char>(outA * 255.f + 0.5f);
-    }
-
-    // the texture keeps the pixels, so the buffer is never freed by hand
-    cocos2d::CCTexture2D* texture() const {
-        auto tex = new cocos2d::CCTexture2D();
-        tex->initWithData(
-            data, cocos2d::kCCTexture2DPixelFormat_RGBA8888, size, size,
-            cocos2d::CCSizeMake(size, size)
-        );
-        return tex;
-    }
-};
-
-float smoothstep(float edge0, float edge1, float x) {
-    float t = (x - edge0) / (edge1 - edge0);
-    if (t < 0.f) t = 0.f;
-    if (t > 1.f) t = 1.f;
-    return t * t * (3.f - 2.f * t);
+cocos2d::ccColor4F shade(int r, int g, int b, float a) {
+    return cocos2d::ccColor4F{ r / 255.f, g / 255.f, b / 255.f, a };
 }
 
-void disc(Pixels& p, float cx, float cy, float radius, int r, int g, int b, float a, float soft = 1.5f) {
-    for (int y = 0; y < p.size; ++y) {
-        for (int x = 0; x < p.size; ++x) {
-            float d = std::hypot(x + 0.5f - cx, y + 0.5f - cy);
-            float cover = 1.f - smoothstep(radius - soft, radius, d);
-            if (cover > 0.f) p.blend(x, y, r, g, b, a * cover);
-        }
-    }
+// the orb sits on top of whatever the vanilla object draws
+void dressOrb(cocos2d::CCNode* object, int r, int g, int b) {
+    auto art = cocos2d::CCDrawNode::create();
+    art->setID("rolikakiu.multimode-orb"_spr);
+
+    art->drawCircle(cocos2d::CCPoint(0, 0), 18.f, shade(r, g, b, 0.20f), 0.f, shade(0, 0, 0, 0.f), 32);
+    art->drawCircle(cocos2d::CCPoint(0, 0), 14.f, shade(r, g, b, 0.95f), 1.5f, shade(255, 255, 255, 0.55f), 32);
+    art->drawCircle(cocos2d::CCPoint(0, 0), 9.f, shade(255, 255, 255, 0.22f), 0.f, shade(0, 0, 0, 0.f), 32);
+    art->drawDot(cocos2d::CCPoint(-4.f, 4.f), 4.5f, shade(255, 255, 255, 0.85f));
+
+    object->addChild(art, 10);
 }
 
-cocos2d::CCTexture2D* drawOrb(int r, int g, int b) {
-    Pixels p(64);
-    float c = 32.f;
-    disc(p, c, c, 31.f, r, g, b, 0.26f, 5.f);
-    disc(p, c, c, 22.f, 255, 255, 255, 0.30f);
-    disc(p, c, c, 20.f, r, g, b, 0.95f);
-    disc(p, c, c, 13.f, 255, 255, 255, 0.28f);
-    disc(p, c - 4.f, c + 4.f, 7.f, 255, 255, 255, 0.85f);
-    return p.texture();
-}
+// the moon, its craters, the stars and the ground the player runs on
+void dressMoon(cocos2d::CCNode* node, cocos2d::CCPoint surface) {
+    auto art = cocos2d::CCDrawNode::create();
+    art->setID("rolikakiu.multimode-moon-art"_spr);
 
-cocos2d::CCTexture2D* drawMoon() {
-    Pixels p(192);
-    float c = 96.f;
-    disc(p, c, c, 86.f, 216, 216, 224, 1.f, 2.f);
+    auto centre = cocos2d::CCPoint(surface.x, surface.y + 560.f);
+    art->drawCircle(centre, 130.f, shade(216, 216, 224, 1.f), 3.f, shade(178, 178, 190, 1.f), 64);
 
     struct Crater { float x, y, r; };
     static const Crater craters[] = {
-        { -24.f, 20.f, 16.f }, { 20.f, -14.f, 11.f }, { 36.f, 28.f, 8.f },
-        { -40.f, -28.f, 10.f }, { 4.f, 44.f, 7.f }, { -8.f, -44.f, 13.f },
+        { -38.f, 32.f, 26.f }, { 30.f, -22.f, 18.f }, { 58.f, 44.f, 13.f },
+        { -64.f, -44.f, 16.f }, { 6.f, 70.f, 11.f }, { -12.f, -70.f, 21.f },
     };
     for (auto& crater : craters) {
-        disc(p, c + crater.x, c + crater.y, crater.r + 1.5f, 242, 242, 248, 0.35f);
-        disc(p, c + crater.x, c + crater.y, crater.r, 178, 178, 190, 0.85f);
+        auto at = cocos2d::CCPoint(centre.x + crater.x, centre.y + crater.y);
+        art->drawCircle(at, crater.r, shade(180, 180, 192, 0.85f), 1.5f, shade(238, 238, 244, 0.5f), 32);
     }
 
-    // a cheap stand-in for shading on the far side of the moon
-    disc(p, c + 34.f, c - 30.f, 74.f, 118, 122, 150, 0.16f, 6.f);
-    return p.texture();
-}
+    unsigned int seed = 0x5eed1234u;
+    auto rand01 = [&seed]() {
+        seed = seed * 1664525u + 1013904223u;
+        return static_cast<float>(seed >> 8) / static_cast<float>(1 << 24);
+    };
+    for (int i = 0; i < 34; ++i) {
+        float angle = rand01() * 6.2831853f;
+        float dist = 320.f + rand01() * 1600.f;
+        float y = surface.y + 140.f + (rand01() - 0.35f) * 1700.f;
+        art->drawDot(
+            cocos2d::CCPoint(surface.x + std::cos(angle) * dist, y),
+            2.f + rand01() * 4.f,
+            shade(255, 255, 255, 0.35f + rand01() * 0.6f)
+        );
+    }
 
-cocos2d::CCTexture2D* drawStar() {
-    Pixels p(32);
-    disc(p, 16.f, 16.f, 15.f, 255, 255, 255, 0.28f, 4.f);
-    disc(p, 16.f, 16.f, 4.5f, 255, 255, 255, 1.f, 1.2f);
-    return p.texture();
-}
+    for (int i = -15; i <= 15; ++i) {
+        art->drawCircle(
+            cocos2d::CCPoint(surface.x + i * 185.f, surface.y - 70.f),
+            88.f, shade(198, 198, 208, 0.95f), 0.f, shade(0, 0, 0, 0.f), 40
+        );
+    }
 
-cocos2d::CCTexture2D* drawGround() {
-    Pixels p(64);
-    disc(p, 32.f, 32.f, 30.f, 198, 198, 208, 1.f, 2.f);
-    disc(p, 23.f, 40.f, 12.f, 176, 176, 190, 0.55f);
-    disc(p, 45.f, 36.f, 8.f, 176, 176, 190, 0.45f);
-    return p.texture();
+    node->addChild(art, 0);
 }
-
-cocos2d::CCTexture2D* orbTexture() { static auto* tex = drawOrb(178, 120, 255); return tex; }
-cocos2d::CCTexture2D* backOrbTexture() { static auto* tex = drawOrb(96, 216, 255); return tex; }
-cocos2d::CCTexture2D* moonTexture() { static auto* tex = drawMoon(); return tex; }
-cocos2d::CCTexture2D* starTexture() { static auto* tex = drawStar(); return tex; }
-cocos2d::CCTexture2D* groundTexture() { static auto* tex = drawGround(); return tex; }
 
 /* ---------------- moon state ---------------- */
 
@@ -266,54 +221,15 @@ public:
     }
 };
 
-/* ---------------- the moon itself ---------------- */
-
 void buildMoon(cocos2d::CCPoint surface) {
     auto node = s_moon.node;
     if (!node) return;
 
     node->removeAllChildren();
     s_moon.surface = surface;
-
-    if (auto tex = moonTexture()) {
-        auto moon = cocos2d::CCSprite::createWithTexture(tex);
-        moon->setPosition(cocos2d::CCPoint(surface.x, surface.y + 560.f));
-        moon->setScale(1.4f);
-        node->addChild(moon, 0);
-    }
-
-    if (auto tex = starTexture()) {
-        unsigned int seed = 0x5eed1234u;
-        auto rand01 = [&seed]() {
-            seed = seed * 1664525u + 1013904223u;
-            return static_cast<float>(seed >> 8) / static_cast<float>(1 << 24);
-        };
-        for (int i = 0; i < 28; ++i) {
-            auto star = cocos2d::CCSprite::createWithTexture(tex);
-            float angle = rand01() * 6.2831853f;
-            float dist = 320.f + rand01() * 1500.f;
-            star->setPosition(cocos2d::CCPoint(
-                surface.x + std::cos(angle) * dist,
-                surface.y + 140.f + (rand01() - 0.35f) * 1600.f
-            ));
-            star->setScale(0.6f + rand01() * 1.5f);
-            star->setOpacity(static_cast<GLubyte>(110.f + rand01() * 120.f));
-            node->addChild(star, 0);
-        }
-    }
-
-    if (auto tex = groundTexture()) {
-        for (int i = -14; i <= 14; ++i) {
-            auto bump = cocos2d::CCSprite::createWithTexture(tex);
-            bump->setPosition(cocos2d::CCPoint(surface.x + i * 190.f, surface.y + 6.f));
-            bump->setScaleX(3.2f);
-            bump->setScaleY(1.1f);
-            bump->setOpacity(static_cast<GLubyte>(205));
-            node->addChild(bump, 0);
-        }
-    }
-
     s_moon.built = true;
+
+    dressMoon(node, surface);
 }
 
 void startMoon(PlayLayer* layer) {
@@ -338,7 +254,7 @@ class $modify(AntikaMoonOrb, RingObject) {
     static RingObject* create(char const* frame) {
         auto orb = RingObject::create(frame);
         if (!orb) return nullptr;
-        if (auto tex = orbTexture()) orb->setTexture(tex);
+        dressOrb(orb, 178, 120, 255);
         orb->m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
         registerOrb(orb, false);
         return orb;
@@ -349,7 +265,7 @@ class $modify(AntikaMoonOrb, RingObject) {
 class $modify(AntikaBackOrb, EventLinkTrigger) {
     bool init() {
         if (!EventLinkTrigger::init()) return false;
-        if (auto tex = backOrbTexture()) this->setTexture(tex);
+        dressOrb(this, 96, 216, 255);
         m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
         registerOrb(this, true);
         return true;
