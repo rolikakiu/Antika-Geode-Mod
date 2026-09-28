@@ -1,4 +1,5 @@
 #include <Geode/Geode.hpp>
+#include <Geode/modify/EditButtonBar.hpp>
 #include <Geode/modify/EditorUI.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/PlayLayer.hpp>
@@ -310,32 +311,26 @@ void startMoon(PlayLayer* layer) {
 
 /* ---------------- the editor ---------------- */
 
-// the editor's build tabs are rebuilt whenever one is opened, so the mod
-// re-adds its own entries to the Orbs tab each time — always starting from
-// the buttons the game made, so nothing is ever lost or duplicated
-class $modify(AntikaEditorTabs, EditorUI) {
-    void onSelectBuildTab(cocos2d::CCObject* sender) {
-        EditorUI::onSelectBuildTab(sender);
-        injectOrbButtons();
-    }
+// When the editor opens a build tab it builds a tab bar and feeds it the
+// tab's objects through EditButtonBar::loadFromItems. The Orbs tab is hooked
+// here: its two Antika entries are added to that object list, created with
+// the same helper GD uses for its own tab buttons, before the bar is laid
+// out — so they appear exactly like vanilla orbs and place like them too.
+class $modify(AntikaEditButtonBar, EditButtonBar) {
+    struct Fields {
+        bool m_orbAdded = false;
+    };
 
-    // give a freshly placed Antika orb a real hitbox box, so even though the
-    // object is invisible it can be selected and moved in the editor
-    GameObject* createObject(int objectID, cocos2d::CCPoint position) {
-        auto obj = EditorUI::createObject(objectID, position);
-        if (obj && (obj->m_objectID == kOrbUpCarrier || obj->m_objectID == kOrbBackCarrier)) {
-            obj->m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
+    void loadFromItems(cocos2d::CCArray* objects, int rows, int columns, bool keepPage) {
+        if (!m_fields->m_orbAdded && isOrbBar(objects)) {
+            auto ui = static_cast<EditorUI*>(this->getParent());
+            if (ui) {
+                if (auto up = ui->getCreateBtn(kOrbUpCarrier, 4)) objects->addObject(up);
+                if (auto back = ui->getCreateBtn(kOrbBackCarrier, 4)) objects->addObject(back);
+                m_fields->m_orbAdded = true;
+            }
         }
-        return obj;
-    }
-
-    void injectOrbButtons() {
-        if (!m_createButtonBars) return;
-        for (int i = 0; i < m_createButtonBars->count(); ++i) {
-            auto bar = typeinfo_cast<EditButtonBar*>(m_createButtonBars->objectAtIndex(i));
-            if (!bar || !isOrbTab(bar)) continue;
-            addOrbButton(bar);
-        }
+        EditButtonBar::loadFromItems(objects, rows, columns, keepPage);
     }
 
     static bool isVanillaOrbId(int id) {
@@ -349,40 +344,26 @@ class $modify(AntikaEditorTabs, EditorUI) {
         }
     }
 
-    static bool isOrbTab(EditButtonBar* bar) {
-        // the Orbs tab is index 10 in the editor, but also recognise it by
-        // its contents so it works even if the index ever differs
-        if (bar->m_tabIndex == 10) return true;
-        auto children = bar->getChildren();
-        if (!children) return false;
-        for (int i = 0; i < children->count(); ++i) {
-            auto item = typeinfo_cast<CreateMenuItem*>(children->objectAtIndex(i));
+    bool isOrbBar(cocos2d::CCArray* objects) {
+        if (m_tabIndex == 10) return true;
+        if (!objects) return false;
+        for (int i = 0; i < objects->count(); ++i) {
+            auto item = typeinfo_cast<CreateMenuItem*>(objects->objectAtIndex(i));
             if (item && isVanillaOrbId(item->m_objectID)) return true;
         }
         return false;
     }
+};
 
-    void addOrbButton(EditButtonBar* bar) {
-        auto children = bar->getChildren();
-        if (!children) return;
-
-        auto items = cocos2d::CCArray::create();
-        for (int i = 0; i < children->count(); ++i) {
-            auto item = typeinfo_cast<CreateMenuItem*>(children->objectAtIndex(i));
-            // only rebuild a bar that is nothing but buttons
-            if (!item) return;
-            items->addObject(item);
+// give a freshly placed Antika orb a real hitbox box, so even though the
+// object is invisible it can be selected and moved in the editor
+class $modify(AntikaEditorButtons, EditorUI) {
+    GameObject* createObject(int objectID, cocos2d::CCPoint position) {
+        auto obj = EditorUI::createObject(objectID, position);
+        if (obj && (obj->m_objectID == kOrbUpCarrier || obj->m_objectID == kOrbBackCarrier)) {
+            obj->m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
         }
-
-        if (auto up = getCreateBtn(kOrbUpCarrier, 4)) items->addObject(up);
-        if (auto back = getCreateBtn(kOrbBackCarrier, 4)) items->addObject(back);
-
-        int rows = GameManager::get()->getIntGameVariableDefault("0049", 4);
-        int cols = GameManager::get()->getIntGameVariableDefault("0050", 4);
-        if (rows <= 0 || rows > 20) rows = 4;
-        if (cols <= 0 || cols > 20) cols = 4;
-
-        bar->loadFromItems(items, rows, cols, true);
+        return obj;
     }
 };
 
