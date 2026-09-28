@@ -30,15 +30,18 @@ constexpr float kFloorHalfWidth = 2600.f;
 constexpr float kCeilingHeight = 1400.f;
 constexpr float kUnderFloor = 700.f;
 
-constexpr auto kOrbUp = "rolikakiu.multimode-orb-up";
-constexpr auto kOrbBack = "rolikakiu.multimode-orb-back";
+// the orbs are found by their tag: a tag is a plain int on the node that
+// nothing else in GD or in the editor's mods touches, so it cannot be confused
+// for a sprite by the editor's sprite batching
+constexpr int kOrbTagUp = 0x0A17;
+constexpr int kOrbTagBack = 0x0A18;
 
 bool isUpOrbNode(cocos2d::CCNode* node) {
-    return node && node->getID() == kOrbUp;
+    return node && node->getTag() == kOrbTagUp;
 }
 
 bool isBackOrbNode(cocos2d::CCNode* node) {
-    return node && node->getID() == kOrbBack;
+    return node && node->getTag() == kOrbTagBack;
 }
 
 /* ---------------- orb art ---------------- */
@@ -48,7 +51,16 @@ cocos2d::ccColor4F shade(int r, int g, int b, float a) {
 }
 
 // a glowing orb: soft halo, bright core, hard rim, one highlight
-void dressOrb(cocos2d::CCNode* object, bool back) {
+//
+// The editor must never see this. In the editor a GameObject lives inside a
+// CCSpriteBatchNode, and LevelEditorLayer::updateVisibility() calls
+// addMainSpriteToParent(true) on every object every frame, which reorders that
+// batch node and walks the object's children as if they were sprites. A
+// CCDrawNode child there makes cocos2d read a sprite out of it and take the
+// game down, so orbs are dressed in the game only.
+void dressOrb(GameObject* object, bool back) {
+    if (object->m_editorEnabled) return;
+
     int r = back ? 96 : 178;
     int g = back ? 216 : 120;
     int b = back ? 255 : 255;
@@ -63,8 +75,9 @@ void dressOrb(cocos2d::CCNode* object, bool back) {
     art->drawDot(cocos2d::CCPoint(-5.5f, 5.5f), 2.f, shade(255, 255, 255, 0.95f));
     object->addChild(art, 10);
 
-    // the orb's own name is what the editor reads back off it
-    object->setID(back ? kOrbBack : kOrbUp);
+    // the orb's own tag is what the mod recognises it by later
+    object->setTag(back ? kOrbTagBack : kOrbTagUp);
+    object->m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
 }
 
 // the moon, its craters, the stars and the ground the player runs on
@@ -277,7 +290,6 @@ void buildMoon(cocos2d::CCPoint surface) {
 
 void startMoon(PlayLayer* layer) {
     auto node = AntikaMoonNode::create();
-    node->setID("rolikakiu.multimode-moon");
     layer->addChild(node, -500);
     s_moon.node = node;
 
@@ -298,7 +310,6 @@ class $modify(AntikaMoonOrb, RingObject) {
         auto orb = RingObject::create(frame);
         if (!orb) return nullptr;
         dressOrb(orb, false);
-        orb->m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
         return orb;
     }
 };
@@ -308,7 +319,6 @@ class $modify(AntikaBackOrb, EventLinkTrigger) {
     bool init() {
         if (!EventLinkTrigger::init()) return false;
         dressOrb(this, true);
-        m_objectRect = cocos2d::CCRectMake(-kOrbSize / 2, -kOrbSize / 2, kOrbSize, kOrbSize);
         return true;
     }
 };
