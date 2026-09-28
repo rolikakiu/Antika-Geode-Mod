@@ -316,19 +316,39 @@ void startMoon(PlayLayer* layer) {
 // here: its two Antika entries are added to that object list, created with
 // the same helper GD uses for its own tab buttons, before the bar is laid
 // out — so they appear exactly like vanilla orbs and place like them too.
+
+// the tab bar's parent is the EditorUI, but some GD versions lay the bar out
+// before it is parented; keep a pointer from EditorUI::init as a fallback
+EditorUI* s_orbEditorUI = nullptr;
+
+class $modify(AntikaEditorUI, EditorUI) {
+    bool init(LevelEditorLayer* editorLayer) {
+        s_orbEditorUI = this;
+        return EditorUI::init(editorLayer);
+    }
+};
+
 class $modify(AntikaEditButtonBar, EditButtonBar) {
     struct Fields {
         bool m_orbAdded = false;
     };
 
     void loadFromItems(cocos2d::CCArray* objects, int rows, int columns, bool keepPage) {
-        if (!m_fields->m_orbAdded && isOrbBar(objects)) {
-            auto ui = static_cast<EditorUI*>(this->getParent());
-            if (ui) {
-                if (auto up = ui->getCreateBtn(kOrbUpCarrier, 4)) objects->addObject(up);
-                if (auto back = ui->getCreateBtn(kOrbBackCarrier, 4)) objects->addObject(back);
-                m_fields->m_orbAdded = true;
+        auto ui = static_cast<EditorUI*>(this->getParent());
+        if (!ui) ui = s_orbEditorUI;
+        if (isOrbBar(objects)) {
+            log::info("antika: orbs tab bar id='{}' tabIndex={} items={} orbAdded={} ui={}", getID(), m_tabIndex, objects ? objects->count() : -1, m_fields->m_orbAdded, (void*)ui);
+        }
+        if (ui && !m_fields->m_orbAdded && isOrbBar(objects)) {
+            if (auto up = ui->getCreateBtn(kOrbUpCarrier, 4)) {
+                objects->addObject(up);
+                log::info("antika: added Antika Orb (1340) to orbs tab");
             }
+            if (auto back = ui->getCreateBtn(kOrbBackCarrier, 4)) {
+                objects->addObject(back);
+                log::info("antika: added Antika Return Orb (1343) to orbs tab");
+            }
+            m_fields->m_orbAdded = true;
         }
         EditButtonBar::loadFromItems(objects, rows, columns, keepPage);
     }
