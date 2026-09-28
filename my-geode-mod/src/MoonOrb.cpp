@@ -31,7 +31,7 @@ using namespace geode::prelude;
 
 namespace {
 
-constexpr float kMoonHeight = 2000.f;
+constexpr float kMoonHeight = 9000.f;
 constexpr float kTouchRadius = 46.f;
 constexpr float kOrbSize = 30.f;
 constexpr float kOrbCooldown = 0.5f;
