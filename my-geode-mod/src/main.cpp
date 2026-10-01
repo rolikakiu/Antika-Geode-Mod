@@ -168,21 +168,31 @@ class $modify(AntikaGameObject, GameObject) {
 };
 
 /* ---------------- Force visibility ---------------- */
-// GD hides a pile of objects: anything with editor support turned off can
-// neither be seen nor picked up. With this on, every object in the current
-// scene is switched back on and made visible - in the editor and in gameplay,
-// in every game mode.
+// GD hides a lot of things: objects with editor support off, and whole
+// subtrees of sprites (the letter inside a letter block, the ring under an
+// orb, trigger decorations). MegaHack's Force Visibility works by setting
+// every node in the scene visible, so it reveals those too - which is why it
+// looks like all the textures mash together. This does the same thing: walk
+// the entire node tree and switch everything back on.
+static void revealNodeTree(cocos2d::CCNode* node, int depth) {
+    if (!node || depth > 40) return;
+    if (!node->isVisible()) node->setVisible(true);
+
+    auto object = typeinfo_cast<GameObject*>(node);
+    if (object) object->m_editorEnabled = true;
+
+    auto children = node->getChildren();
+    if (!children) return;
+    for (int i = 0; i < children->count(); ++i) {
+        auto child = typeinfo_cast<cocos2d::CCNode*>(children->objectAtIndex(i));
+        revealNodeTree(child, depth + 1);
+    }
+}
+
 static void revealHiddenObjects(GJBaseGameLayer* layer) {
     if (!forceVisibilityOn()) return;
-
-    auto objects = layer->m_objects;
-    if (!objects) return;
-    for (int i = 0; i < objects->count(); ++i) {
-        auto obj = typeinfo_cast<GameObject*>(objects->objectAtIndex(i));
-        if (!obj) continue;
-        obj->m_editorEnabled = true;
-        if (!obj->isVisible()) obj->setVisible(true);
-    }
+    if (!layer) return;
+    revealNodeTree(layer, 0);
 }
 
 class $modify(AntikaPlayVisibility, PlayLayer) {
