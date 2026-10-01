@@ -14,6 +14,8 @@ static void eclipseSyncAll() {
     eclipse::config::set("antika-accurate", mod->getSettingValue<bool>("accurate"));
     eclipse::config::set("antika-truehit", mod->getSettingValue<bool>("truehit"));
     eclipse::config::set("antika-noclip", mod->getSettingValue<bool>("noclip"));
+    eclipse::config::set("antika-nodieblock", mod->getSettingValue<bool>("nodieblock"));
+    eclipse::config::set("antika-force-visibility", mod->getSettingValue<bool>("force-visibility"));
     eclipse::config::set("antika-force-ice", mod->getSettingValue<bool>("force-ice"));
     eclipse::config::set("antika-force-platformer", mod->getSettingValue<bool>("force-platformer"));
     eclipse::config::set("antika-force-classic", mod->getSettingValue<bool>("force-classic"));
@@ -67,6 +69,14 @@ $on_mod(Loaded) {
             Mod::get()->setSettingValue("noclip", value);
         }).setDescription("Spikes can't touch you and blocks are passable: fly through everything and never die.");
 
+        tab.addToggle("antika-nodieblock", "Wave No-Die Block", [](bool value) {
+            Mod::get()->setSettingValue("nodieblock", value);
+        }).setDescription("The Wave mode can't die: spikes touch safely and blocks are passable, exactly like being under a D Block everywhere.");
+
+        tab.addToggle("antika-force-visibility", "Force Visibility", [](bool value) {
+            Mod::get()->setSettingValue("force-visibility", value);
+        }).setDescription("Reveal every hidden object everywhere - editor and gameplay, every game mode: anything with editor support switched off becomes visible.");
+
         tab.addToggle("antika-force-ice", "Force Ice", [](bool value) {
             Mod::get()->setSettingValue("force-ice", value);
         }).setDescription("Every block becomes an ice block in platformer mode.");
@@ -114,6 +124,12 @@ $on_mod(Loaded) {
         });
         geode::listenForSettingChanges<bool>("noclip", [](bool value) {
             eclipse::config::set("antika-noclip", value);
+        });
+        geode::listenForSettingChanges<bool>("nodieblock", [](bool value) {
+            eclipse::config::set("antika-nodieblock", value);
+        });
+        geode::listenForSettingChanges<bool>("force-visibility", [](bool value) {
+            eclipse::config::set("antika-force-visibility", value);
         });
         geode::listenForSettingChanges<bool>("force-ice", [](bool value) {
             eclipse::config::set("antika-force-ice", value);

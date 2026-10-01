@@ -6,7 +6,7 @@
     },
     "id": "rolikakiu.multimode",
     "name": "antika geode mod",
-    "version": "1.8.3",
+    "version": "1.9.2",
     "developer": "rolikakiu",
     "description": "Gameplay toggles for Geometry Dash: negative hitboxes, accurate/TRIE hitboxes, negative mode, noclip, force ice, force platformer, force classic, don't move camera, force game mode in classic and all modes in platformer (Ship, Ball, UFO, Wave, Robot, Spider, Swing).",
     "repository": "https://github.com/rolikakiu/Antika-Geode-Mod",
@@ -87,6 +87,18 @@
             "type": "bool",
             "name": "Noclip",
             "description": "Spikes can't touch you and blocks are passable: you can fly through everything and never die.",
+            "default": false
+        },
+        "nodieblock": {
+            "type": "bool",
+            "name": "Wave No-Die Block",
+            "description": "The Wave mode can't die: spikes touch safely and blocks are passable, exactly like being under a D Block everywhere. Can be toggled here or from the Eclipse menu.",
+            "default": true
+        },
+        "force-visibility": {
+            "type": "bool",
+            "name": "Force Visibility",
+            "description": "Turn on every hidden object everywhere - in the editor and in gameplay, in every game mode: anything with editor support switched off becomes visible and selectable. Can be toggled here or from the Eclipse menu.",
             "default": false
         },
         "force-ice": {

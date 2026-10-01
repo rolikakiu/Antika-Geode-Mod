@@ -4,6 +4,7 @@
 #include <Geode/modify/GameObject.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
+#include <Geode/modify/LevelEditorLayer.hpp>
 #include <cocos2d.h>
 #include <set>
 #include <cmath>
@@ -16,6 +17,8 @@ constexpr int kEndLevelID = 149188646;
 static bool neghitOn() { return Mod::get()->getSettingValue<bool>("neghit"); }
 static bool negativeOn() { return Mod::get()->getSettingValue<bool>("negative"); }
 static bool noclipOn() { return Mod::get()->getSettingValue<bool>("noclip"); }
+static bool nodieBlockOn() { return Mod::get()->getSettingValue<bool>("nodieblock"); }
+static bool forceVisibilityOn() { return Mod::get()->getSettingValue<bool>("force-visibility"); }
 static bool forceIceOn() { return Mod::get()->getSettingValue<bool>("force-ice"); }
 static bool forcePlatformerOn() { return Mod::get()->getSettingValue<bool>("force-platformer"); }
 static bool forceClassicOn() { return Mod::get()->getSettingValue<bool>("force-classic"); }
@@ -124,12 +127,12 @@ static void applyForceGameMode(PlayLayer* layer) {
 
 class $modify(AntikaPlayerObject, PlayerObject) {
     bool collidedWithObject(float dt, GameObject* object, cocos2d::CCRect rect, bool skipCheck) {
-        if (noclipOn()) return false;
+        if (noclipOn() || (nodieBlockOn() && m_isDart)) return false;
         return PlayerObject::collidedWithObject(dt, object, rect, skipCheck);
     }
 
     bool collidedWithObjectInternal(float dt, GameObject* object, cocos2d::CCRect rect, bool skipCheck) {
-        if (noclipOn()) return false;
+        if (noclipOn() || (nodieBlockOn() && m_isDart)) return false;
         return PlayerObject::collidedWithObjectInternal(dt, object, rect, skipCheck);
     }
 
@@ -161,6 +164,39 @@ class $modify(AntikaGameObject, GameObject) {
             m_scaleX = -m_scaleX;
             m_scaleY = -m_scaleY;
         }
+    }
+};
+
+/* ---------------- Force visibility ---------------- */
+// GD hides a pile of objects: anything with editor support turned off can
+// neither be seen nor picked up. With this on, every object in the current
+// scene is switched back on and made visible - in the editor and in gameplay,
+// in every game mode.
+static void revealHiddenObjects(GJBaseGameLayer* layer) {
+    if (!forceVisibilityOn()) return;
+
+    auto objects = layer->m_objects;
+    if (!objects) return;
+    for (int i = 0; i < objects->count(); ++i) {
+        auto obj = typeinfo_cast<GameObject*>(objects->objectAtIndex(i));
+        if (!obj) continue;
+        obj->m_editorEnabled = true;
+        if (!obj->isVisible()) obj->setVisible(true);
+    }
+}
+
+class $modify(AntikaPlayVisibility, PlayLayer) {
+    void updateVisibility(float dt) {
+        revealHiddenObjects(this);
+        PlayLayer::updateVisibility(dt);
+    }
+};
+
+// the editor runs its own visibility pass, so it needs its own reveal too
+class $modify(AntikaEditorVisibility, LevelEditorLayer) {
+    void updateEditor(float dt) {
+        LevelEditorLayer::updateEditor(dt);
+        revealHiddenObjects(this);
     }
 };
 

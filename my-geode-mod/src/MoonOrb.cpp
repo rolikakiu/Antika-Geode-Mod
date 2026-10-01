@@ -32,6 +32,8 @@ using namespace geode::prelude;
 namespace {
 
 constexpr float kMoonHeight = 9000.f;
+constexpr float kLaunchVelocity = 2400.f;
+constexpr float kLaunchCruise = 1800.f;
 constexpr float kTouchRadius = 46.f;
 constexpr float kOrbSize = 30.f;
 constexpr float kOrbCooldown = 0.5f;
@@ -174,6 +176,7 @@ struct MoonState {
     cocos2d::CCPoint surface = cocos2d::CCPoint(0, 0);
     cocos2d::CCPoint backPos = cocos2d::CCPoint(0, 0);
     bool hasBack = false;
+    bool launching = false;
     bool built = false;
     cocos2d::CCNode* node = nullptr;
     cocos2d::CCNode* night = nullptr;
@@ -209,15 +212,19 @@ void buildMoon(cocos2d::CCPoint surface);
 void enterMoon(PlayerObject* player) {
     auto dest = cocos2d::CCPointMake(player->m_position.x, player->m_position.y + kMoonHeight);
     s_moon.hasBack = true;
+    s_moon.launching = true;
     s_moon.backPos = player->m_position;
     buildMoon(dest);
-    moveTo(player, dest);
+    // a real launch: kick the player up, then moonTick cruises them the rest
+    // of the way so arriving on the moon is guaranteed
+    player->setYVelocity(kLaunchVelocity, 0);
 }
 
 void leaveMoon(PlayerObject* player) {
     if (!s_moon.hasBack) return;
     auto dest = s_moon.backPos;
     s_moon.hasBack = false;
+    s_moon.launching = false;
     moveTo(player, dest);
 }
 
@@ -227,7 +234,17 @@ void moonTick() {
 
     bool anyInside = false;
     eachPlayer([&anyInside](PlayerObject* player) {
-        if (player->m_isDead || !inMoonArea(player)) return;
+        if (player->m_isDead) return;
+
+        // guided climb: while launching below the moon's catch band, drive
+        // the player upward every frame so the trip always succeeds
+        if (s_moon.launching && player->m_position.y < s_moon.surface.y - kUnderFloor) {
+            player->setYVelocity(kLaunchCruise, 0);
+            return;
+        }
+        s_moon.launching = false;
+
+        if (!inMoonArea(player)) return;
         anyInside = true;
         if (player->m_position.y > s_moon.surface.y) return;
 
@@ -237,6 +254,20 @@ void moonTick() {
     });
 
     if (s_moon.night) s_moon.night->setVisible(anyInside);
+}
+
+// GD only pans the camera as far as the level's own edges, so a launch up to
+// 9000 would fly off-screen and the moon would never be seen. While the moon
+// trip is active, force the camera to follow the player with the game's own
+// camera-trigger function, which is allowed to point anywhere.
+void pinCameraDuringMoon() {
+    if (!s_moon.hasBack) return;
+    auto layer = PlayLayer::get();
+    if (!layer) return;
+    eachPlayer([&layer](PlayerObject* player) {
+        if (player->m_isDead) return;
+        layer->moveCameraToPos(player->m_position);
+    });
 }
 
 void orbTick(float dt) {
@@ -282,6 +313,7 @@ public:
         cocos2d::CCNode::update(dt);
         moonTick();
         orbTick(dt);
+        pinCameraDuringMoon();
     }
 };
 
@@ -423,5 +455,6 @@ class $modify(AntikaMoonRespawnHook, PlayerObject) {
         PlayerObject::resetObject();
         // respawning means the trip to the moon is over
         s_moon.hasBack = false;
+        s_moon.launching = false;
     }
 };
