@@ -168,36 +168,41 @@ class $modify(AntikaGameObject, GameObject) {
 };
 
 /* ---------------- Force visibility ---------------- */
-// GD hides a lot of things: objects with editor support off, and whole
-// subtrees of sprites (the letter inside a letter block, the ring under an
-// orb, trigger decorations). MegaHack's Force Visibility works by setting
-// every node in the scene visible, so it reveals those too - which is why it
-// looks like all the textures mash together. This does the same thing: walk
-// the entire node tree and switch everything back on.
-static void revealNodeTree(cocos2d::CCNode* node, int depth) {
-    if (!node || depth > 40) return;
-    if (!node->isVisible()) node->setVisible(true);
+// MegaHack reveals the hidden sprites by walking nodes, but it walks the whole
+// layer, which drags in the editor's own UI/palette nodes and anything being
+// freed mid-reset. Doing that crashed the editor's object-move code and the
+// level-reset path. Scope it to the level's own objects and their subtrees -
+// that is where the MegaHack-style texture-mash look actually comes from.
+static bool s_revealBlocked = false;
 
-    auto object = typeinfo_cast<GameObject*>(node);
-    if (object) object->m_editorEnabled = true;
+static void revealNodeTree(cocos2d::CCNode* node, int depth) {
+    if (!node || depth > 8) return;
+    if (!node->isVisible()) node->setVisible(true);
 
     auto children = node->getChildren();
     if (!children) return;
     for (int i = 0; i < children->count(); ++i) {
-        auto child = typeinfo_cast<cocos2d::CCNode*>(children->objectAtIndex(i));
-        revealNodeTree(child, depth + 1);
+        revealNodeTree(typeinfo_cast<cocos2d::CCNode*>(children->objectAtIndex(i)), depth + 1);
     }
 }
 
-static void revealHiddenObjects(GJBaseGameLayer* layer) {
-    if (!forceVisibilityOn()) return;
+static void revealHiddenObjects(GJBaseGameLayer* layer, bool inEditor) {
+    if (!forceVisibilityOn() || s_revealBlocked) return;
     if (!layer) return;
-    revealNodeTree(layer, 0);
+
+    auto objects = layer->m_objects;
+    if (!objects) return;
+    for (int i = 0; i < objects->count(); ++i) {
+        auto object = typeinfo_cast<GameObject*>(objects->objectAtIndex(i));
+        if (!object) continue;
+        if (inEditor) object->m_editorEnabled = true;
+        revealNodeTree(object, 0);
+    }
 }
 
 class $modify(AntikaPlayVisibility, PlayLayer) {
     void updateVisibility(float dt) {
-        revealHiddenObjects(this);
+        revealHiddenObjects(this, false);
         PlayLayer::updateVisibility(dt);
     }
 };
@@ -206,7 +211,7 @@ class $modify(AntikaPlayVisibility, PlayLayer) {
 class $modify(AntikaEditorVisibility, LevelEditorLayer) {
     void updateEditor(float dt) {
         LevelEditorLayer::updateEditor(dt);
-        revealHiddenObjects(this);
+        revealHiddenObjects(this, true);
     }
 };
 
@@ -589,11 +594,15 @@ class $modify(AntikaPlayLayer, PlayLayer) {
     }
 
     void resetLevel() {
+        // the object tree is being torn down and rebuilt here - walking it is
+        // how force visibility crashed during a reset
+        s_revealBlocked = true;
         PlayLayer::resetLevel();
         applyForceGameMode(this);
         if (make3dOn()) {
             applyMakeEverything3D(this);
         }
+        s_revealBlocked = false;
     }
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
